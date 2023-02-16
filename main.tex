@@ -39,7 +39,7 @@
 
 % Title, author
 \title{%
-  <Long title>\thanks{%
+  Smoothing operator for quasi-optimal nonconforming methods\thanks{%
     Submitted to the editors DATE.
   }
 }
@@ -48,12 +48,12 @@
     Department of Mathematics, Chemnitz University of Technology, Chemnitz, 09126 Germany
     (\email{jan.blechta@math.tu-chemnitz.de}).}
     \and
-    Jane Doe\thanks{%
-    ACME
-    (\email{doe@acme.edu}).}
+    Alexei Gazca\thanks{%
+    University of Freiburg, Germany
+    (\email{alexei.gazca@mathematik.uni-freiburg.de}).}
 }
 \headers{<short title>}
-        {J.~Blechta, J.~Doe}
+        {J.~Blechta, A.~Gazca}
 
 
 \begin{document}
@@ -61,6 +61,8 @@
 
 
 \begin{abstract}
+  We discuss implementation of the smoothing operator
+  by \cite{veeser-zanotti-iii}.
 \end{abstract}
 
 
@@ -76,8 +78,49 @@
 \tableofcontents
 
 
-\section{Introduction}
-\label{sec:intro}
+\section{The lowest-order case on triangles}
+%
+We consider the action of operator $E_p$ from \cite{veeser-zanotti-iii}
+for the lowest-order case~$p=1$:
+%
+\begin{align*}
+  \langle f, E_1 v \rangle
+  & = \langle f, A_1 v \rangle + \langle f, B_1 (v - A_1 v) \rangle \\
+  & = \sum_{z\in\mathcal{L}^{\mathrm{int}}_1} v|_{K_z}(z) \, \langle f, \varphi^1_z \rangle
+    + \sum_{F\in F^{\mathrm{int}}} \Bigl( \int_F \ldblbrace v \rdblbrace - \sum_{z\in\mathcal{L}^F_1} v|_{K_z}(z) \, \int_F \varphi_z^1 \Bigr) \langle f, \hat\varphi_F \rangle,
+\end{align*}
+where $\hat\varphi_F$ is the facet bubble normalized as $\int_{F'} \hat\varphi_F = \delta_{FF'}$,
+i.e., $\hat\varphi_F = \tfrac{6}{|F|} \varphi^1_{z_F^1} \varphi^1_{z_F^2}$ on triangles.
+Testing by a~Crouzeix--Raviart basis function $v\coloneqq \varphi^{\mathrm{CR}}_F$ we obtain
+\begin{multline*}
+  \langle f, E_1 \varphi^{\mathrm{CR}}_F \rangle
+  \\
+  = \sum_{z\in\mathcal{L}^{\mathrm{int}}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \langle f, \varphi^1_z \rangle
+  + \sum_{F'\in F^{\mathrm{int}}} \Bigl( \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace - \sum_{z\in\mathcal{L}^{F'}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \int_{F'} \varphi_z^1 \Bigr) \langle f, \hat\varphi_F \rangle.
+\end{multline*}
+
+We have
+%
+\begin{equation*}
+  \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace = \delta_{FF'} |F|,
+\end{equation*}
+%
+\begin{equation*}
+  \varphi^{\mathrm{CR}}_F|_{K_z}(z) = \begin{cases}
+    1  & \text{if $F\in K_z$ and $z\in\overline{F}$,} \\
+    -1 & \text{if $F\in K_z$ and $z$ is a~vertex adjacent to~$F$,} \\
+    0  & \text{if $F\notin K_z$}
+  \end{cases}
+\end{equation*}
+%
+and
+%
+\begin{equation*}
+  \int_{F'} \varphi^1_z = \tfrac12 |F'| \quad \text{if $z\in\overline F'$.}
+\end{equation*}
+%
+
+
 
 
 \begingroup
