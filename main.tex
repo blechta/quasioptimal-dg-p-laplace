@@ -96,7 +96,7 @@ Testing by a~Crouzeix--Raviart basis function $v\coloneqq \varphi^{\mathrm{CR}}_
   \langle f, E_1 \varphi^{\mathrm{CR}}_F \rangle
   \\
   = \sum_{z\in\mathcal{L}^{\mathrm{int}}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \langle f, \varphi^1_z \rangle
-  + \sum_{F'\in F^{\mathrm{int}}} \Bigl( \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace - \sum_{z\in\mathcal{L}^{F'}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \int_{F'} \varphi_z^1 \Bigr) \langle f, \hat\varphi_F \rangle.
+  + \sum_{F'\in F^{\mathrm{int}}} \Bigl( \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace - \sum_{z\in\mathcal{L}^{F'}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \int_{F'} \varphi_z^1 \Bigr) \langle f, \hat\varphi_{F'} \rangle.
 \end{multline*}
 
 We have
@@ -107,9 +107,9 @@ We have
 %
 \begin{equation*}
   \varphi^{\mathrm{CR}}_F|_{K_z}(z) = \begin{cases}
-    1  & \text{if $F\in K_z$ and $z\in\overline{F}$,} \\
-    -1 & \text{if $F\in K_z$ and $z$ is a~vertex adjacent to~$F$,} \\
-    0  & \text{if $F\notin K_z$}
+    1  & \text{if $F\in\overline{K_z}$ and $z\in\overline{F}$,} \\
+    -1 & \text{if $F\in\overline{K_z}$ and $z$ is a~vertex adjacent to~$F$,} \\
+    0  & \text{if $F\notin\overline{K_z}$}
   \end{cases}
 \end{equation*}
 %
