@@ -43,45 +43,53 @@ def solve(mesh, p_, space="CR", smoothing=False):
 
     # Get right-hand-side and apply smoothing if required
     if smoothing:
-        raise NotImplementedError # How do you use this?
-#        op = SmoothingOpVeeserZanotti(Z)
+        op = SmoothingOpVeeserZanotti(Z)
+        b = op.apply(rhs)
     else:
-        F_rhs = rhs(v)
+        #F_rhs = rhs(v)
+        b = fd.assemble(rhs(v))
 
-    # Define form
-    visc = viscosity(u, p_)
+    ## Define form
+    #visc = viscosity(u, p_)
     #F = fd.inner(visc * fd.grad(u), fd.grad(v)) * fd.dx
     # FIXME: Probably some dumb mistake, but the solver diverges when visc is there (even for p=2)
-    F = fd.inner(fd.grad(u), fd.grad(v)) * fd.dx
-    F -= F_rhs
+    #F = fd.inner(fd.grad(u), fd.grad(v)) * fd.dx
+    #F -= F_rhs
+    #
+    ## Solver parameters
+    #sp = {"snes_type": "newtonls",
+    #      "snes_monitor": None,
+    #      "snes_converged_reason": None,
+    #      "snes_linesearch_type": "nleqerr",
+    #      'snes_linesearch_damping': 1.0,
+    #      "snes_atol": 1.0e-7,
+    #      "snes_rtol": 1.0e-7,
+    #      "ksp_type": "preonly",
+    #      "pc_type": "lu",
+    #      "pc_factor_mat_solver_type": "mumps",
+    #      "mat_mumps_cntl_1": 1e-6,
+    #      "mat_mumps_icntl_14": 2000}
+    #
+    #fd.solve(F == 0, u, bcs, solver_parameters=sp)
 
-    # Solver parameters
-    sp = {"snes_type": "newtonls",
-          "snes_monitor": None,
-          "snes_converged_reason": None,
-          "snes_linesearch_type": "nleqerr",
-          'snes_linesearch_damping': 1.0,
-          "snes_atol": 1.0e-7,
-          "snes_rtol": 1.0e-7,
-          "ksp_type": "preonly",
-          "pc_type": "lu",
-          "pc_factor_mat_solver_type": "mumps",
-          "mat_mumps_cntl_1": 1e-6,
-          "mat_mumps_icntl_14": 2000}
-
-    fd.solve(F == 0, u, bcs, solver_parameters=sp)
+    #visc = viscosity(u, p_)
+    #a = fd.inner(visc * fd.grad(u), fd.grad(v)) * fd.dx
+    # FIXME: Probably some dumb mistake, but the solver diverges when visc is there (even for p=2)
+    a = fd.inner(fd.grad(u), fd.grad(v)) * fd.dx
+    A = fd.assemble(fd.derivative(a, u), bcs=bcs)
+    fd.solve(A, u, b)
 
     return u
 
 if __name__ == '__main__':
     # Choose the exponent for p-Laplace
     p_ = fd.Constant(2.)
-    mesh = fd.UnitSquareMesh(4, 4)
+    mesh = fd.UnitSquareMesh(32, 32, diagonal='crossed')
 
     # Compare the solutions with CG1, CR1 and CR1 with smoothing
     u_cg = solve(mesh, p_, "CG")
     u_cr = solve(mesh, p_, "CR")
-#    u_cr_sth = solve(mesh, p_, "CR", smoothing=True)
+    u_cr_sth = solve(mesh, p_, "CR", smoothing=True)
 
     # Visualize. All these functions should coincide
-    fd.File("test1.pvd").write(exact_solution(u_cg.ufl_domain()), u_cg, u_cr)
+    fd.File("test1.pvd").write(exact_solution(u_cg.ufl_domain()), u_cg, u_cr, u_cr_sth)
