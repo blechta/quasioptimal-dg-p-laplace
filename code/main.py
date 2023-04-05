@@ -1,5 +1,6 @@
 from firedrake import *
 from petsc4py import PETSc
+import numpy as np
 
 
 class SmoothingOpVeeserZanotti(object):
@@ -46,8 +47,8 @@ class SmoothingOpVeeserZanotti(object):
         v_start, v_end = self.v_start, self.v_end
         facets, cone, first_cell = self.facets, self.cone, self.first_cell
 
-        F12 = [[f-f_start for f in facets(first_cell(v)) if v in cone(f)] for v in range(v_start, v_end)]
-        F3 = [[f-f_start for f in facets(first_cell(v)) if v not in cone(f)] for v in range(v_start, v_end)]
+        F12 = [[f for f in facets(first_cell(v)) if v in cone(f)] for v in range(v_start, v_end)]
+        F3 = [[f for f in facets(first_cell(v)) if v not in cone(f)] for v in range(v_start, v_end)]
         F1 = [ff[0] for ff in F12]
         F2 = [ff[1] for ff in F12]
         F3 = [ff[0] for ff in F3]
@@ -58,6 +59,36 @@ class SmoothingOpVeeserZanotti(object):
         FF21 = [F1[cone(f)[1]-v_start] for f in range(f_start, f_end)]
         FF22 = [F2[cone(f)[1]-v_start] for f in range(f_start, f_end)]
         FF23 = [F3[cone(f)[1]-v_start] for f in range(f_start, f_end)]
+
+        map_vals = np.vectorize(self.V.dm.getSection().getOffset, otypes=[utils.IntType])
+        F1 = map_vals(F1)
+        F2 = map_vals(F2)
+        F3 = map_vals(F3)
+        FF11 = map_vals(FF11)
+        FF12 = map_vals(FF12)
+        FF13 = map_vals(FF13)
+        FF21 = map_vals(FF21)
+        FF22 = map_vals(FF22)
+        FF23 = map_vals(FF23)
+
+        P1, FB = self.spaces
+
+        map_inds = np.vectorize(P1.dm.getSection().getOffset, otypes=[utils.IntType])
+        perm = map_inds(np.arange(v_start, v_end, dtype=utils.IntType))
+        perm = np.argsort(perm)
+        F1 = F1[perm]
+        F2 = F2[perm]
+        F3 = F3[perm]
+
+        map_inds = np.vectorize(FB.dm.getSection().getOffset, otypes=[utils.IntType])
+        perm = map_inds(np.arange(f_start, f_end, dtype=utils.IntType))
+        perm = np.argsort(perm)
+        FF11 = FF11[perm]
+        FF12 = FF12[perm]
+        FF13 = FF13[perm]
+        FF21 = FF21[perm]
+        FF22 = FF22[perm]
+        FF23 = FF23[perm]
 
         F1 = PETSc.IS().createGeneral(F1)
         F2 = PETSc.IS().createGeneral(F2)
@@ -86,6 +117,11 @@ class SmoothingOpVeeserZanotti(object):
         f2 = getattr(self, 'f2', None)
         self.f1 = f1 = assemble(rhs(TestFunction(P1)), tensor=f1).vector()
         self.f2 = f2 = assemble(rhs(TestFunction(FB)), tensor=f2).vector()
+
+        bc1 = DirichletBC(P1, Constant(0.), "on_boundary")
+        bc2 = DirichletBC(FB, Constant(0.), "on_boundary")
+        bc1.apply(f1)
+        bc2.apply(f2)
 
         # The new right-hand side shall be a functional (which is
         # conventionally handled as a Function in Firedrake) on V
