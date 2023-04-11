@@ -129,30 +129,29 @@ class SmoothingOpVeeserZanotti(object):
         with result.dat.vec_wo as v:
             with f2.dat.vec_ro as v2:
                 v.axpy(3/2, v2)
-                isaxpy(v, FF11, -3/4, v2)
-                isaxpy(v, FF12, -3/4, v2)
-                isaxpy(v, FF13, +3/4, v2)
-                isaxpy(v, FF21, -3/4, v2)
-                isaxpy(v, FF22, -3/4, v2)
-                isaxpy(v, FF23, +3/4, v2)
+                vecisaxpy(v, FF11, -3/4, v2)
+                vecisaxpy(v, FF12, -3/4, v2)
+                vecisaxpy(v, FF13, +3/4, v2)
+                vecisaxpy(v, FF21, -3/4, v2)
+                vecisaxpy(v, FF22, -3/4, v2)
+                vecisaxpy(v, FF23, +3/4, v2)
             with f1.dat.vec_ro as v1:
-                v.isaxpy(F1, +1, v1)
-                v.isaxpy(F2, +1, v1)
-                v.isaxpy(F3, -1, v1)
+                vecisaxpy(v, F1, +1, v1)
+                vecisaxpy(v, F2, +1, v1)
+                vecisaxpy(v, F3, -1, v1)
 
         return result
 
 
-def isaxpy(vfull, iset, alpha, vreduced):
+def vecisaxpy(vfull, iset, alpha, vreduced):
     """Work around the bug in VecISAXPY:
-
-    486:   if (nfull == nreduced) { /* Also takes care of masked vectors */
-    487:     PetscCall(VecAXPY(vfull, alpha, vreduced));
-
-    i.e., iset is ignored if the vectors are of the same size.
+    https://gitlab.com/petsc/petsc/-/issues/1357
     """
-    for i, j in enumerate(iset.array):
-        vfull[j] += alpha*vreduced[i]
+    if vfull.size == vreduced.size:
+        for i, j in enumerate(iset.array):
+            vfull[j] += alpha*vreduced[i]
+    else:
+        vfull.isaxpy(iset, alpha, vreduced)
 
 
 if __name__ == '__main__':
