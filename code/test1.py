@@ -65,7 +65,20 @@ def solve(mesh, space="CR", smoothing=False):
     A = fd.assemble(fd.derivative(a, u), bcs=bcs)
     fd.solve(A, u, b)
 
+    report_traces(u)
+
     return u
+
+
+def compute_traces(u):
+    interior = fd.jump(u)**2 * fd.dS
+    exterior = u**2 * fd.ds
+    return fd.assemble(interior)**0.5, fd.assemble(exterior)**0.5
+
+
+def report_traces(u):
+    j, t = compute_traces(u)
+    print(f"||[[{u.name()}]]||_2 = {j}, ||tr({u.name()})||_2 = {t}")
 
 
 def main():
@@ -78,8 +91,10 @@ def main():
 
     u_dg_interp = fd.project(u_dg, fd.FunctionSpace(mesh, 'CG', 1))
     u_dg_interp.rename(u_dg.name() + '_interp')
+    report_traces(u_dg_interp)
 
-    fd.File("test1.pvd").write(exact_solution(u_cg.ufl_domain()), u_cg, u_cr, u_cr_sth, u_dg, u_dg_interp)
+    funcs = exact_solution(mesh), u_cg, u_cr, u_cr_sth, u_dg, u_dg_interp
+    fd.File("test1.pvd").write(*funcs)
 
 
 if __name__ == '__main__':
