@@ -23,10 +23,10 @@ def rhs(test_function):
 
 
 def lhs(u, v):
-    if u.function_space().ufl_element().family() == 'Discontinuous Lagrange':
+    if v.function_space().ufl_element().family() == 'Discontinuous Lagrange':
         mesh = u.function_space().mesh()
         n = fd.FacetNormal(mesh)
-        h = fd.CellSize(mesh)
+        h = fd.CellDiameter(mesh)
         h_avg = (h('+') + h('-'))/2
         alpha = 4.0  # hard-coded param
         gamma = 8.0  # hard-coded param
