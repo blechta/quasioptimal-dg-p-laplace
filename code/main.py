@@ -46,13 +46,17 @@ class SmoothingOpVeeserZanotti(object):
         f_start, f_end = self.f_start, self.f_end
         v_start, v_end = self.v_start, self.v_end
         facets, cone, first_cell = self.facets, self.cone, self.first_cell
+        P1, FB = self.spaces
 
+        # Compute facets in the "first cell" of each vertex
         F12 = [[f for f in facets(first_cell(v)) if v in cone(f)] for v in range(v_start, v_end)]
         F3 = [[f for f in facets(first_cell(v)) if v not in cone(f)] for v in range(v_start, v_end)]
-        F1 = [ff[0] for ff in F12]
-        F2 = [ff[1] for ff in F12]
-        F3 = [ff[0] for ff in F3]
+        F1 = [ff[0] for ff in F12]  # first adjacent facet
+        F2 = [ff[1] for ff in F12]  # second adjacent facet
+        F3 = [ff[0] for ff in F3]   # opposite facet
 
+        # Compose F1, F2, F3 with v0(f), v1(f), where v0, v1 give
+        # vertices of a given facet
         FF11 = [F1[cone(f)[0]-v_start] for f in range(f_start, f_end)]
         FF12 = [F2[cone(f)[0]-v_start] for f in range(f_start, f_end)]
         FF13 = [F3[cone(f)[0]-v_start] for f in range(f_start, f_end)]
@@ -60,6 +64,7 @@ class SmoothingOpVeeserZanotti(object):
         FF22 = [F2[cone(f)[1]-v_start] for f in range(f_start, f_end)]
         FF23 = [F3[cone(f)[1]-v_start] for f in range(f_start, f_end)]
 
+        # Map facet indices to CR dofs
         map_vals = np.vectorize(self.V.dm.getSection().getOffset, otypes=[utils.IntType])
         F1 = map_vals(F1)
         F2 = map_vals(F2)
@@ -71,8 +76,7 @@ class SmoothingOpVeeserZanotti(object):
         FF22 = map_vals(FF22)
         FF23 = map_vals(FF23)
 
-        P1, FB = self.spaces
-
+        # Map vertex indices to P1 dofs
         map_inds = np.vectorize(P1.dm.getSection().getOffset, otypes=[utils.IntType])
         perm = map_inds(np.arange(v_start, v_end, dtype=utils.IntType))
         perm = np.argsort(perm)
@@ -80,6 +84,7 @@ class SmoothingOpVeeserZanotti(object):
         F2 = F2[perm]
         F3 = F3[perm]
 
+        # Map facet indices to FB dofs
         map_inds = np.vectorize(FB.dm.getSection().getOffset, otypes=[utils.IntType])
         perm = map_inds(np.arange(f_start, f_end, dtype=utils.IntType))
         perm = np.argsort(perm)
