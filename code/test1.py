@@ -65,7 +65,7 @@ def solve(mesh, space="CR", smoothing=False):
     A = fd.assemble(fd.derivative(a, u), bcs=bcs)
     fd.solve(A, u, b)
 
-    report_traces(u)
+    report_errors(u)
 
     return u
 
@@ -76,9 +76,18 @@ def compute_traces(u):
     return fd.assemble(interior)**0.5, fd.assemble(exterior)**0.5
 
 
-def report_traces(u):
+def compute_errors(u):
+    u_ex = exact_solution(u.ufl_domain())
+    err_l2 = (u-u_ex)**2 * fd.dx
+    err_h1 = fd.dot(fd.grad(u-u_ex), fd.grad(u-u_ex)) * fd.dx
+    return fd.assemble(err_l2)**0.5, fd.assemble(err_h1)**0.5
+
+
+def report_errors(u):
     j, t = compute_traces(u)
-    print(f"||[[{u.name()}]]||_2 = {j}, ||tr({u.name()})||_2 = {t}")
+    err_l2, err_h1 = compute_errors(u)
+    u = u.name()
+    print(f"||[[{u}]]||_2 = {j}, ||tr({u})||_2 = {t}, ||{u}-u_ex||_2 = {err_l2}, ||grad({u}-e_ex)||_2 = {err_h1}")
 
 
 def main():
@@ -91,7 +100,7 @@ def main():
 
     u_dg_interp = fd.project(u_dg, fd.FunctionSpace(mesh, 'CG', 1))
     u_dg_interp.rename(u_dg.name() + '_interp')
-    report_traces(u_dg_interp)
+    report_errors(u_dg_interp)
 
     funcs = exact_solution(mesh), u_cg, u_cr, u_cr_sth, u_dg, u_dg_interp
     fd.File("test1.pvd").write(*funcs)
