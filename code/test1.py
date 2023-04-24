@@ -86,8 +86,7 @@ def compute_errors(u):
 def report_errors(u):
     j, t = compute_traces(u)
     err_l2, err_h1 = compute_errors(u)
-    u = u.name()
-    print(f"||[[{u}]]||_2 = {j}, ||tr({u})||_2 = {t}, ||{u}-u_ex||_2 = {err_l2}, ||grad({u}-e_ex)||_2 = {err_h1}")
+    print(f"{u.name(): <10} ||[[u_h]]||_2 = {j:.2e}, ||tr(u_h)||_2 = {t:.2e}, ||u_h-u_ex||_2 = {err_l2:.2e}, ||grad(u_h-u_ex)||_2 = {err_h1:.2e}")
 
 
 def main():
@@ -98,11 +97,7 @@ def main():
     u_cr_sth = solve(mesh, "CR", smoothing=True)
     u_dg = solve(mesh, "DG")
 
-    u_dg_interp = fd.project(u_dg, fd.FunctionSpace(mesh, 'CG', 1))
-    u_dg_interp.rename(u_dg.name() + '_interp')
-    report_errors(u_dg_interp)
-
-    funcs = exact_solution(mesh), u_cg, u_cr, u_cr_sth, u_dg, u_dg_interp
+    funcs = exact_solution(mesh), u_cg, u_cr, u_cr_sth, u_dg
     fd.File("test1.pvd").write(*funcs)
 
 
