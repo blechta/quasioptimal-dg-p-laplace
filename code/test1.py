@@ -1,6 +1,6 @@
 import firedrake as fd
 
-from main import SmoothingOpVeeserZanotti
+from smoothing import SmoothingOpVeeserZanotti
 
 
 def exact_solution(mesh):
