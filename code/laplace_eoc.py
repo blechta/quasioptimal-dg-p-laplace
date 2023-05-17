@@ -6,10 +6,25 @@ import pprint
 
 from smoothing import SmoothingOpVeeserZanotti
 
-def exact_solution(mesh):
+def cutoff(r):
+    smoothing_parameter = 100.
+    Heaviside1 = 0.5 + 0.5 * smoothing_parameter * (r-0.25) / fd.sqrt(1 + (smoothing_parameter*(r-0.25))**2)
+    Heaviside2 = 0.5 + 0.5 * smoothing_parameter * (0.75-r) / fd.sqrt(1 + (smoothing_parameter*(0.75-r))**2)
+    return Heaviside1*Heaviside2
+
+def exact_solution(mesh, smooth=False): #FIXME: What's a good way of deciding which solution? rhs doesn't take additional parameters
     # Smooth exact solutions
     x, y = fd.SpatialCoordinate(mesh)
-    solution = fd.sin(4*fd.pi*x)*y**2*(1.-y)**2
+    if smooth:
+        solution = fd.sin(4*fd.pi*x)*y**2*(1.-y)**2
+    else:
+        #TODO: This should belong to H1 and no better. Easier to test things in between first?
+        #FIXME: Does not work yet... the singularity is probably causing trouble
+        r = ((x-0.5)**2 + (y-0.5)**2)**0.5
+        solution = fd.ln(fd.ln(r))*cutoff(r)
+        #============== TEST =========================
+        fd.File("test_eoc.pvd").write(fd.interpolate(solution, fd.FunctionSpace(mesh, "CG",1)))
+        #=============================================
     return solution
 
 def lhs(u, v):
@@ -92,6 +107,7 @@ if __name__ == "__main__":
 
     res = [2**i for i in range(2,args.nrefs)]
     h_s = [1./re for re in res]
+
 
     # Compute the errors and rates
     errors = {n: solve_laplace(res[n], space=args.disc, smoothing=args.smoothing)[1] for n in range(len(res))}
