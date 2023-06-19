@@ -3,13 +3,10 @@ from petsc4py import PETSc
 import numpy as np
 
 
-class SmoothingOpVeeserZanotti(object):
+class SmoothingOpBase(object):
 
-    def __init__(self, V):
-        assert V.ufl_element().family() == 'Crouzeix-Raviart'
-        mesh = V.ufl_domain()
+    def __init__(self, mesh):
         assert mesh.topological_dimension() == 2, '3d not yet implemented'
-        self.V = V
         self.dm = mesh.topology_dm
         self.v_start, self.v_end = mesh.topology_dm.getDepthStratum(0)
         self.c_start, self.c_end = mesh.topology_dm.getHeightStratum(0)
@@ -40,6 +37,39 @@ class SmoothingOpVeeserZanotti(object):
             assert c in (c1 for v in self.vertices(c) for c1 in self.cells(v))
         for v in range(self.v_start, self.v_end):
             assert v in (v1 for c in self.cells(v) for v1 in self.vertices(c))
+
+
+class SmoothingOpVeeserZanotti(SmoothingOpBase):
+
+    def __new__(cls, V):
+        if V.ufl_element().family() == 'Crouzeix-Raviart':
+            return SmoothingOpVeeserZanottiCR.__new__(SmoothingOpVeeserZanottiCR, V)
+        elif V.ufl_element().family() == 'Discontinuous Lagrange':
+            return SmoothingOpVeeserZanottiDG.__new__(SmoothingOpVeeserZanottiDG, V)
+        else:
+            return object.__new__(cls)
+
+    def __init__(self, V):
+        assert V.ufl_element().degree() == 1
+        self.V = V
+        super(SmoothingOpVeeserZanotti, self).__init__(V.ufl_domain())
+
+    @utils.cached_property
+    def spaces(self):
+        mesh = self.V.ufl_domain()
+        P1 = FunctionSpace(mesh, 'P', 1)
+        FB = FunctionSpace(mesh, 'FB', mesh.topological_dimension())
+        return P1, FB
+
+
+class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
+
+    def __new__(cls, *args, **kwargs):
+        return object.__new__(cls)
+
+    def __init__(self, V):
+        assert V.ufl_element().family() == 'Crouzeix-Raviart'
+        super(SmoothingOpVeeserZanottiCR, self).__init__(V)
 
     @utils.cached_property
     def index_sets(self):
@@ -107,12 +137,6 @@ class SmoothingOpVeeserZanotti(object):
 
         return F1, F2, F3, FF11, FF12, FF13, FF21, FF22, FF23
 
-    @utils.cached_property
-    def spaces(self):
-        mesh = self.V.ufl_domain()
-        P1 = FunctionSpace(mesh, 'P', 1)
-        FB = FunctionSpace(mesh, 'FB', mesh.topological_dimension())
-        return P1, FB
 
     def apply(self, rhs, result=None):
 
@@ -148,6 +172,23 @@ class SmoothingOpVeeserZanotti(object):
         return result
 
 
+class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
+
+    def __new__(cls, *args, **kwargs):
+        return object.__new__(cls)
+
+    def __init__(self, V):
+        assert V.ufl_element().family() == 'Discontinuous Lagrange'
+        super(SmoothingOpVeeserZanottiDG, self).__init__(V)
+
+    @utils.cached_property
+    def index_sets(self):
+        raise NotImplementedError
+
+    def apply(self, rhs, result=None):
+        raise NotImplementedError
+
+
 def vecisaxpy(vfull, iset, alpha, vreduced):
     """Work around the bug in VecISAXPY:
     https://gitlab.com/petsc/petsc/-/issues/1357
@@ -162,16 +203,17 @@ def vecisaxpy(vfull, iset, alpha, vreduced):
 if __name__ == '__main__':
 
     mesh = UnitSquareMesh(3, 3)
-    V = FunctionSpace(mesh, 'CR', 1)
-    op = SmoothingOpVeeserZanotti(V)
-    op.test_vertex_cell_conn()
+    for space in ['CR', 'DG']:
+        V = FunctionSpace(mesh, space, 1)
+        op = SmoothingOpVeeserZanotti(V)
+        op.test_vertex_cell_conn()
 
-    def rhs1(test_function):
-        f = 1
-        return f*test_function*dx
-    F = op.apply(rhs1)
+        def rhs1(test_function):
+            f = 1
+            return f*test_function*dx
+        F = op.apply(rhs1)
 
-    def rhs2(test_function):
-        f = as_vector([1, -1])
-        return inner(f, grad(test_function))*dx
-    op.apply(rhs2, result=F)
+        def rhs2(test_function):
+            f = as_vector([1, -1])
+            return inner(f, grad(test_function))*dx
+        op.apply(rhs2, result=F)
