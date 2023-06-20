@@ -61,6 +61,36 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
         FB = FunctionSpace(mesh, 'FB', mesh.topological_dimension())
         return P1, FB
 
+    def assemble_rhs(self, rhs):
+        # Assemble the right-hand side on P1 and facet bubbles
+        P1, FB = self.spaces
+        f1 = getattr(self, 'f1', None)
+        f2 = getattr(self, 'f2', None)
+        self.f1 = f1 = assemble(rhs(TestFunction(P1)), tensor=f1).vector()
+        self.f2 = f2 = assemble(rhs(TestFunction(FB)), tensor=f2).vector()
+        return f1, f2
+
+    def apply(self, rhs, result=None):
+
+        # The new right-hand side shall be a functional (which is
+        # conventionally handled as a Function in Firedrake) on V
+        if result is None:
+            result = Function(self.V)
+        else:
+            result.dat.zero()
+
+        f1, f2 = self.assemble_rhs(rhs)
+        coeffs1, coeffs2 = self.coeffs
+        with result.dat.vec_wo as v:
+            with f1.dat.vec_ro as v1:
+                for iset, alpha in coeffs1:
+                    isaxpy_or_axpy(v, iset, alpha, v1)
+            with f2.dat.vec_ro as v2:
+                for iset, alpha in coeffs2:
+                    isaxpy_or_axpy(v, iset, alpha, v2)
+
+        return result
+
 
 class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
 
@@ -72,7 +102,7 @@ class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
         super(SmoothingOpVeeserZanottiCR, self).__init__(V)
 
     @utils.cached_property
-    def index_sets(self):
+    def coeffs(self):
         f_start, f_end = self.f_start, self.f_end
         v_start, v_end = self.v_start, self.v_end
         facets, cone, first_cell = self.facets, self.cone, self.first_cell
@@ -135,41 +165,11 @@ class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
         FF22 = PETSc.IS().createGeneral(FF22)
         FF23 = PETSc.IS().createGeneral(FF23)
 
-        return F1, F2, F3, FF11, FF12, FF13, FF21, FF22, FF23
-
-
-    def apply(self, rhs, result=None):
-
-        # Assemble the right-hand side on P1 and facet bubbles
-        P1, FB = self.spaces
-        f1 = getattr(self, 'f1', None)
-        f2 = getattr(self, 'f2', None)
-        self.f1 = f1 = assemble(rhs(TestFunction(P1)), tensor=f1).vector()
-        self.f2 = f2 = assemble(rhs(TestFunction(FB)), tensor=f2).vector()
-
-        # The new right-hand side shall be a functional (which is
-        # conventionally handled as a Function in Firedrake) on V
-        if result is None:
-            result = Function(self.V)
-        else:
-            result.dat.zero()
-
-        F1, F2, F3, FF11, FF12, FF13, FF21, FF22, FF23 = self.index_sets
-        with result.dat.vec_wo as v:
-            with f2.dat.vec_ro as v2:
-                v.axpy(3/2, v2)
-                vecisaxpy(v, FF11, -3/4, v2)
-                vecisaxpy(v, FF12, -3/4, v2)
-                vecisaxpy(v, FF13, +3/4, v2)
-                vecisaxpy(v, FF21, -3/4, v2)
-                vecisaxpy(v, FF22, -3/4, v2)
-                vecisaxpy(v, FF23, +3/4, v2)
-            with f1.dat.vec_ro as v1:
-                vecisaxpy(v, F1, +1, v1)
-                vecisaxpy(v, F2, +1, v1)
-                vecisaxpy(v, F3, -1, v1)
-
-        return result
+        coeffs1 = [(F1, +1), (F2, +1), (F3, -1)]
+        coeffs2 = [(None, 3/2),
+                   (FF11, -3/4), (FF12, -3/4), (FF13, +3/4),
+                   (FF21, -3/4), (FF22, -3/4), (FF23, +3/4)]
+        return coeffs1, coeffs2
 
 
 class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
@@ -182,11 +182,16 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         super(SmoothingOpVeeserZanottiDG, self).__init__(V)
 
     @utils.cached_property
-    def index_sets(self):
+    def coeffs(self):
         raise NotImplementedError
 
-    def apply(self, rhs, result=None):
-        raise NotImplementedError
+
+def isaxpy_or_axpy(vfull, iset, alpha, vreduced):
+    """Perform VecISAXPY or VecAXPY if iset is None"""
+    if iset is None:
+        vfull.axpy(alpha, vreduced)
+    else:
+        vecisaxpy(vfull, iset, alpha, vreduced)
 
 
 def vecisaxpy(vfull, iset, alpha, vreduced):
