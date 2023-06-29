@@ -52,18 +52,16 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
 
     def __new__(cls, V):
         if V.ufl_element().family() == 'Crouzeix-Raviart':
-            return SmoothingOpVeeserZanottiCR.__new__(SmoothingOpVeeserZanottiCR, V)
-            #return SmoothingOpVeeserZanottiCR(V)
+            return SmoothingOpVeeserZanottiCR(V)
         elif V.ufl_element().family() == 'Discontinuous Lagrange':
-            return SmoothingOpVeeserZanottiDG.__new__(SmoothingOpVeeserZanottiDG, V)
-            #return SmoothingOpVeeserZanottiDG(V)
+            return SmoothingOpVeeserZanottiDG(V)
         else:
             return object.__new__(cls)
 
     def __init__(self, V):
         assert V.ufl_element().degree() == 1
         self.V = V
-        super(SmoothingOpVeeserZanotti, self).__init__(V.ufl_domain())
+        super().__init__(V.ufl_domain())
 
     @utils.cached_property
     def spaces(self):
@@ -94,9 +92,11 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
         coeffs1, coeffs2 = self.coeffs
         with result.dat.vec_wo as v:
             with f1.dat.vec_ro as v1:
+                v1.setOption(PETSc.Vec.Option.IGNORE_NEGATIVE_INDICES, True)
                 for iset, alpha in coeffs1:
                     isaxpy_or_axpy(v, iset, alpha, v1)
             with f2.dat.vec_ro as v2:
+                v2.setOption(PETSc.Vec.Option.IGNORE_NEGATIVE_INDICES, True)
                 for iset, alpha in coeffs2:
                     isaxpy_or_axpy(v, iset, alpha, v2)
 
@@ -105,12 +105,9 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
 
 class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
 
-    def __new__(cls, *args, **kwargs):
-        return object.__new__(cls)
-
-    def __init__(self, V):
+    def __new__(cls, V, *args, **kwargs):
         assert V.ufl_element().family() == 'Crouzeix-Raviart'
-        super(SmoothingOpVeeserZanottiCR, self).__init__(V)
+        return object.__new__(cls)
 
     @utils.cached_property
     def coeffs(self):
@@ -185,15 +182,13 @@ class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
 
 class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
 
-    def __new__(cls, *args, **kwargs):
-        return object.__new__(cls)
-
-    def __init__(self, V):
+    def __new__(cls, V, *args, **kwargs):
         assert V.ufl_element().family() == 'Discontinuous Lagrange'
-        super(SmoothingOpVeeserZanottiDG, self).__init__(V)
+        return object.__new__(cls)
 
     @utils.cached_property
     def coeffs(self):
+        c_start = self.c_start
         f_start, f_end = self.f_start, self.f_end
         v_start, v_end = self.v_start, self.v_end
         vertices, facet_cells, cone, first_cell = self.vertices, self.facet_cells, self.cone, self.first_cell
@@ -207,23 +202,38 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         mask = Kvertices.T == np.arange(v_start, v_end)
         local_v_in_Kv = mask.argmax(axis=0)
 
+        # Test
+        assert ([vertices(Kv[v])[local_v_in_Kv[v]] for v in range(v_end-v_start)] == np.arange(v_start, v_end)).all()
+
+        # Compute boundary entities
+        bc_facets = DG1.mesh().exterior_facets.facets
+        bc_vertices = {v for f in bc_facets for v in cone(f)}
+        num_bc_vertices = len(bc_vertices)
+        bc_vertices = np.fromiter(bc_vertices, dtype=utils.IntType)
+        bc_vertices = np.unique(bc_vertices)
+        assert bc_vertices.size == num_bc_vertices
+
         # Map cell and local vertex index pairs to DG1 dofs
         f2p = DG1.mesh().cell_closure[:, -1]
         p2f = np.argsort(f2p)
+        assert c_start == 0
         fdofs = DG1.cell_node_list
         def map_vals_(pc, lv):
+            if pc < 0 or lv < 0:
+                return -1
             return fdofs[p2f[pc], lv]
         map_vals = np.vectorize(map_vals_, otypes=[utils.IntType])
         F = map_vals(Kv, local_v_in_Kv)
+        F[bc_vertices-v_start] = -1
 
         # Compose F with v0(f), v1(f), where v0, v1 give
         # vertices of a given facet
-        # FIXME: Maybe we're ignoring BC here
         FF1 = [F[cone(f)[0]-v_start] for f in range(f_start, f_end)]
         FF2 = [F[cone(f)[1]-v_start] for f in range(f_start, f_end)]
-
-        FF1 = np.array(FF1)
-        FF2 = np.array(FF2)
+        FF1 = np.array(FF1, dtype=utils.IntType)
+        FF2 = np.array(FF2, dtype=utils.IntType)
+        FF1[bc_facets-f_start] = -1
+        FF2[bc_facets-f_start] = -1
 
         # Compute cells and vertices for all facets
         C1 = [facet_cells(f)[0] for f in range(f_start, f_end)]
@@ -236,18 +246,22 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         C2vertices = np.array([vertices(c) if c>-1 else [-1,-1,-1] for c in C2])
         mask11 = C1vertices.T == np.array(V1)
         mask12 = C1vertices.T == np.array(V2)
-        mask21 = C2vertices.T == np.array(V1)  # FIXME: How to handle -1's?
-        mask22 = C2vertices.T == np.array(V2)  # FIXME: How to handle -1's?
+        mask21 = C2vertices.T == np.array(V1)
+        mask22 = C2vertices.T == np.array(V2)
         local_V1_in_C1 = mask11.argmax(axis=0)
         local_V2_in_C1 = mask12.argmax(axis=0)
-        local_V1_in_C2 = mask21.argmax(axis=0)  # FIXME: How to handle -1's?
-        local_V2_in_C2 = mask22.argmax(axis=0)  # FIXME: How to handle -1's?
+        local_V1_in_C2 = np.where(mask21.any(axis=0), mask21.argmax(axis=0), -1)
+        local_V2_in_C2 = np.where(mask22.any(axis=0), mask22.argmax(axis=0), -1)
 
         # Map cell and local vertex index pairs to DG1 dofs
         FF11 = map_vals(C1, local_V1_in_C1)
         FF12 = map_vals(C1, local_V2_in_C1)
-        FF21 = map_vals(C2, local_V1_in_C2)  # FIXME: How to handle -1's?
-        FF22 = map_vals(C2, local_V2_in_C2)  # FIXME: How to handle -1's?
+        FF21 = map_vals(C2, local_V1_in_C2)  # -1 if facet on boundary
+        FF22 = map_vals(C2, local_V2_in_C2)  # -1 if facet on boundary
+        FF11[bc_facets-f_start] = -1
+        FF12[bc_facets-f_start] = -1
+        FF21[bc_facets-f_start] = -1
+        FF22[bc_facets-f_start] = -1
 
         # Map vertex indices to P1 dofs
         map_inds = np.vectorize(P1.dm.getSection().getOffset, otypes=[utils.IntType])
@@ -281,7 +295,7 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         return coeffs1, coeffs2
 
     def assemble_rhs(self, rhs):
-        f1, f2 = super(SmoothingOpVeeserZanottiDG, self).assemble_rhs(rhs)
+        f1, f2 = super().assemble_rhs(rhs)
         bc1, bc2 = self.bcs_rhs
         bc1.apply(f1)
         bc2.apply(f2)
@@ -308,7 +322,12 @@ def vecisaxpy(vfull, iset, alpha, vreduced):
     https://gitlab.com/petsc/petsc/-/issues/1357
     """
     if vfull.size == vreduced.size:
+        rstart, rend = vfull.owner_range
         for i, j in enumerate(iset.array):
+            if j < 0:
+                continue
+            if j >= rend or j < rstart:
+                raise ValueError
             vfull[j] += alpha*vreduced[i]
     else:
         vfull.isaxpy(iset, alpha, vreduced)
