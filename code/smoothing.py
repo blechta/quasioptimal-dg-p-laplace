@@ -191,19 +191,28 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         c_start = self.c_start
         f_start, f_end = self.f_start, self.f_end
         v_start, v_end = self.v_start, self.v_end
-        vertices, facet_cells, cone, first_cell = self.vertices, self.facet_cells, self.cone, self.first_cell
+        facet_cells, cone, first_cell = self.facet_cells, self.cone, self.first_cell
         (P1, FB), DG1 = self.spaces, self.V
+
+        # Construct mapping from cell and vertex to DG1 dof
+        f2p = DG1.mesh().cell_closure[:, -1]
+        p2f = np.argsort(f2p)
+        assert c_start == 0
+        fdofs = DG1.cell_node_list
+        def map_vals_(pc, lv):
+            if pc < 0 or lv < 0:
+                return -1
+            return fdofs[p2f[pc], lv]
+        map_vals = np.vectorize(map_vals_, otypes=[utils.IntType])
 
         # Compute "first cell" of each vertex
         Kv = [first_cell(v) for v in range(v_start, v_end)]
 
         # Compute local vertex number for each v in Kv
-        Kvertices = np.array([vertices(c) for c in Kv])
+        fvertices = DG1.mesh().cell_closure[:, 0:3]
+        Kvertices = np.array([fvertices[p2f[c]] for c in Kv])
         mask = Kvertices.T == np.arange(v_start, v_end)
         local_v_in_Kv = mask.argmax(axis=0)
-
-        # Test
-        assert ([vertices(Kv[v])[local_v_in_Kv[v]] for v in range(v_end-v_start)] == np.arange(v_start, v_end)).all()
 
         # Compute boundary entities
         bc_facets = DG1.mesh().exterior_facets.facets
@@ -214,15 +223,6 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         assert bc_vertices.size == num_bc_vertices
 
         # Map cell and local vertex index pairs to DG1 dofs
-        f2p = DG1.mesh().cell_closure[:, -1]
-        p2f = np.argsort(f2p)
-        assert c_start == 0
-        fdofs = DG1.cell_node_list
-        def map_vals_(pc, lv):
-            if pc < 0 or lv < 0:
-                return -1
-            return fdofs[p2f[pc], lv]
-        map_vals = np.vectorize(map_vals_, otypes=[utils.IntType])
         F = map_vals(Kv, local_v_in_Kv)
         F[bc_vertices-v_start] = -1
 
@@ -242,8 +242,8 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         V2 = [cone(f)[1] for f in range(f_start, f_end)]
 
         # Compute local vertex number for each vertex and cell
-        C1vertices = np.array([vertices(c) for c in C1])
-        C2vertices = np.array([vertices(c) if c>-1 else [-1,-1,-1] for c in C2])
+        C1vertices = np.array([fvertices[p2f[c]] for c in C1])
+        C2vertices = np.array([fvertices[p2f[c]] if c>-1 else [-1,-1,-1] for c in C2])
         mask11 = C1vertices.T == np.array(V1)
         mask12 = C1vertices.T == np.array(V2)
         mask21 = C2vertices.T == np.array(V1)
@@ -291,7 +291,6 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         coeffs1 = [(F, +1)]
         coeffs2 = [(FF1, -3/4), (FF2, -3/4),
                    (FF11, 3/8), (FF12, 3/8), (FF21, 3/8), (FF22, 3/8)]
-        #import pdb; pdb.set_trace()
         return coeffs1, coeffs2
 
     def assemble_rhs(self, rhs):
@@ -320,6 +319,10 @@ def isaxpy_or_axpy(vfull, iset, alpha, vreduced):
 def vecisaxpy(vfull, iset, alpha, vreduced):
     """Work around the bug in VecISAXPY:
     https://gitlab.com/petsc/petsc/-/issues/1357
+
+    TODO: Fixed in PETSc >= 3.19.1; see
+    https://gitlab.com/petsc/petsc/-/commit/02a61dc80d8db8beafc07ae7f4b29a54f31ade06
+    Bump PETSc version and remove workaround.
     """
     if vfull.size == vreduced.size:
         rstart, rend = vfull.owner_range
