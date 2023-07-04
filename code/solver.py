@@ -19,7 +19,7 @@ class NonlinearEllipticProblem(object):
 
     def bcs(self, Z):
         #For now we only do homogeneous BCs
-        return fd.DirichletBC(Z.ufl_domain(), fd.Constant(0.), "on_boundary")
+        return fd.DirichletBC(Z, fd.Constant(0.), "on_boundary")
 
     def const_rel(self, *args): raise NotImplementedError
 
@@ -79,13 +79,15 @@ class NonlinearEllipticSolver(object):
             # the linear system. This is vastly faster than the dense
             # alternative.
             print("Current Newton iteration: %i"%n)
-            fd.solve(A, deltaz, b, bcs=self.bcs, solver_parameters=self.get_parameters())
+#            fd.solve(A, deltaz, b, bcs=self.bcs, solver_parameters=self.get_parameters())
+            fd.solve(A, deltaz, b, solver_parameters=self.get_parameters())
 
             # Update the solution and check for convergence
             self.z.assign(self.z + deltaz)
 
             # Relative tolerance: compare relative to the current guess 
-            p = self.problem.const_rel_params.get("p", default=2.0) # Get power-law exponent
+#            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
+            p = 2 #FIXME: Compute with the Lp norm
             p = str(p)
             print("----- Computing with the %s norm", ("L"+p))
             relerror = fd.norm(deltaz, norm_type="l"+p) / fd.norm(self.z, norm_type="l"+p)
@@ -104,7 +106,7 @@ class NonlinearEllipticSolver(object):
 
     def assemble_system(self):
         J = self.get_jacobian()
-        A = fd.assemble(J)
+        A = fd.assemble(J, bcs=self.bcs)
 
         if self.smoothing:
             op = SmoothingOpVeeserZanotti
@@ -112,16 +114,15 @@ class NonlinearEllipticSolver(object):
             b = op.apply(lambda test_f : self.problem.rhs(test_f.function_space()))
 #            b = op.apply(self.problem.rhs)
         else:
-            b = fd.assemble(self.problem.rhs(fd.TestFunction(self.Z)))
+            b = fd.assemble(self.problem.rhs(self.Z))
 
         return A, b
 
     def get_jacobian(self):
-        # Later we will need something other than Newon
+        # Later we will need something other than Newton
         J0 = fd.derivative(self.lhs(), self.z)
         return J0
 
-    def lhs(self): raise NotImplementedError
 
     def split_variables(self, z):
         Z = self.Z
@@ -162,6 +163,8 @@ class NonlinearEllipticSolver(object):
                   }
         return params
 
+    def lhs(self): raise NotImplementedError
+
 class ConformingSolver(NonlinearEllipticSolver):
 
     def function_space(self, mesh, k):
@@ -188,7 +191,7 @@ class ConformingSolver(NonlinearEllipticSolver):
         elif self.formulation_Su:
             F = (
                 fd.inner(S, fd.grad(v)) * fd.dx
-                fd.inner(T, fd.grad(u)) * fd.dx
+                + fd.inner(T, fd.grad(u)) * fd.dx
                 - fd.inner(G, T) * fd.dx
             )
         else:
@@ -196,6 +199,6 @@ class ConformingSolver(NonlinearEllipticSolver):
         return F
 
 
-def CrouzeixRaviartSolver(ConformingSolver): raise NotImplementedError
+#class CrouzeixRaviartSolver(ConformingSolver): raise NotImplementedError
 
-def DGSolver(NonlinearEllipticSolver): raise NotImplementedError
+#class DGSolver(NonlinearEllipticSolver): raise NotImplementedError
