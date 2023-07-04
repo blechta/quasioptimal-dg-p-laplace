@@ -61,7 +61,7 @@ class NonlinearEllipticSolver(object):
         self.bcs = bcs
 
 
-    def solve(self, maxiter=20, atol=1e-8, rtol=1e-6):
+    def solve(self, maxiter=3, atol=1e-8, rtol=1e-6):
         """ Rudimentary implementation of Newton """
 
         # The update
@@ -79,11 +79,30 @@ class NonlinearEllipticSolver(object):
             # the linear system. This is vastly faster than the dense
             # alternative.
             print("Current Newton iteration: %i"%n)
-#            fd.solve(A, deltaz, b, bcs=self.bcs, solver_parameters=self.get_parameters())
             fd.solve(A, deltaz, b, solver_parameters=self.get_parameters())
+#====================== TEST ========================================
+#            a_ = fd.inner(fd.grad(fd.TrialFunction(self.Z)), fd.grad(fd.TestFunction(self.Z))) * fd.dx
+#            L_ = -fd.inner(fd.grad(self.z), fd.grad(fd.TestFunction(self.Z))) * fd.dx
+#            L_ += self.problem.rhs(self.Z)
+#            fd.solve(a_ == L_, deltaz, bcs=self.bcs)
+#====================== TEST ========================================
 
             # Update the solution and check for convergence
             self.z.assign(self.z + deltaz)
+
+            # Print residual (not used for convergence criteria)
+            F = self.lhs()
+            F -= self.problem.rhs(self.Z)
+            F = fd.assemble(F)
+            with F.dat.vec_ro as v:
+                print("-------- Residual norm = %.14e" % v.norm())
+#====================== TEST ========================================
+#            F_ = fd.inner(fd.grad(self.z), fd.grad(fd.TestFunction(self.Z))) * fd.dx
+#            F_ -= self.problem.rhs(self.Z)
+#            F_ = fd.assemble(F_)
+#            with F_.dat.vec_ro as v:
+#                print("-------- (Dumb) Residual norm = %.14e" % v.norm())
+#====================== TEST ========================================
 
             # Relative tolerance: compare relative to the current guess 
 #            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
@@ -101,7 +120,6 @@ class NonlinearEllipticSolver(object):
             if (abserror < atol):
                 print("Correction satisfied the absolute tolerance!")
                 break
-            # TODO: Print also residual?
 
 
     def assemble_system(self):
@@ -114,13 +132,22 @@ class NonlinearEllipticSolver(object):
             b = op.apply(lambda test_f : self.problem.rhs(test_f.function_space()))
 #            b = op.apply(self.problem.rhs)
         else:
-            b = fd.assemble(self.problem.rhs(self.Z))
+            b = -self.residual()
+            b = fd.assemble(b)
 
         return A, b
+
+    def residual(self):
+        return self.lhs() - self.problem.rhs(self.Z)
+
 
     def get_jacobian(self):
         # Later we will need something other than Newton
         J0 = fd.derivative(self.lhs(), self.z)
+
+#====================== TEST ========================================
+#        J0 = fd.inner(fd.grad(fd.TrialFunction(self.Z)), fd.grad(fd.TestFunction(self.Z))) * fd.dx
+#====================== TEST ========================================
         return J0
 
 
