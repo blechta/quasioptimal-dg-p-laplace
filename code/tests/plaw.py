@@ -31,7 +31,12 @@ class PowerLawTest(NonlinearEllipticProblem):
         v = fd.TestFunction(Z)
         S = self.const_rel(fd.grad(sols))
         L = - fd.div(S) * v * fd.dx
+#        L = fd.inner(S, fd.grad(v)) * fd.dx
         return L
+
+    def interpolate_initial_guess(self, z):
+        x, y = fd.SpatialCoordinate(z.ufl_domain())
+        z.interpolate(x**2 * (1-x)**2 * y**2 * (1-y)**2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -55,6 +60,8 @@ if __name__ == "__main__":
                     "CR": CrouzeixRaviartSolver,
                     "DG": DGSolver}[args.disc]
     solver_ = solver_class(problem_, nref=args.nref, smoothing=args.smoothing)
+
+    problem_.interpolate_initial_guess(solver_.z)
 
     solver_.solve()
 

@@ -127,7 +127,8 @@ class NonlinearEllipticSolver(object):
 
         if self.smoothing:
             op = SmoothingOpVeeserZanotti(self.Z)
-            b = op.apply(lambda test_f : -self.lhs() + self.problem.rhs(self.Z)) #FIXME: Not working for some reason...
+#            b = op.apply(lambda test_f : -self.lhs() + self.problem.rhs(self.Z)) #FIXME: Not working for some reason...
+            b = op.apply(lambda test_f : -self.residual())
         else:
             b = -self.residual()
             b = fd.assemble(b)
@@ -135,7 +136,8 @@ class NonlinearEllipticSolver(object):
         return A, b
 
     def residual(self):
-        return self.lhs() - self.problem.rhs(self.Z)
+#        self.bcs.apply(self.z)
+        return self.lhs() #- self.problem.rhs(self.Z)
 
 
     def get_jacobian(self):
