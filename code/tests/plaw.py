@@ -6,7 +6,7 @@ import sys
 sys.path.append('..')
 
 # importing
-from solver import NonlinearEllipticProblem, ConformingSolver#, CrouzeixRaviartSolver, DGSolver
+from solver import NonlinearEllipticProblem, ConformingSolver, CrouzeixRaviartSolver, DGSolver
 
 class PowerLawTest(NonlinearEllipticProblem):
     def __init__(self, baseN, p, K, diagonal=None):
@@ -51,16 +51,18 @@ if __name__ == "__main__":
     K = 1.0
 
     problem_ = PowerLawTest(args.baseN, p, K, diagonal=args.diagonal)
-#    solver_class = {"CG": ConformingSolver,
-#                    "CR": CrouzeixRaviartSolver,
-#                    "DG": DGSolver}[args.disc]
-    solver_class = ConformingSolver
+    solver_class = {"CG": ConformingSolver,
+                    "CR": CrouzeixRaviartSolver,
+                    "DG": DGSolver}[args.disc]
     solver_ = solver_class(problem_, nref=args.nref, smoothing=args.smoothing)
 
     solver_.solve()
 
+    u = solver_.z
+    u_exact = fd.interpolate(problem_.exact_solution(solver_.Z), fd.FunctionSpace(u.ufl_domain(), "CG", args.k + 3))
+    u_exact.rename("exact_solution")
+    print("W^{1, %s} distance to the exact solution = "%p, solver_.W1pnorm(u - u_exact, p))
+
     if args.plots:
-        u = solver_.z
-        u_exact = fd.interpolate(problem_.exact_solution(solver.Z), fd.FunctionSpace(u.ufl_domain(), "CG", args.k))
         fd.File("output/plaw_test.pvd").write(u, u_exact)
 

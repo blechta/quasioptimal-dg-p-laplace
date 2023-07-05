@@ -2,6 +2,7 @@ import firedrake as fd
 
 from smoothing import SmoothingOpVeeserZanotti
 
+
 class NonlinearEllipticProblem(object):
     def __init__(self, **const_rel_params):
         # We will work with primal and mixed formulations
@@ -45,6 +46,7 @@ class NonlinearEllipticSolver(object):
         self.smoothing = smoothing
         self.formulation_u = (self.problem.formulation == "u")
         self.formulation_Su = (self.problem.formulation == "S-u")
+        self.k = k
 
         mh = problem.mesh_hierarchy(self.nref)
         self.mh = mh
@@ -70,7 +72,7 @@ class NonlinearEllipticSolver(object):
         # Do the actual loop
         for n in range(maxiter+1):
             # Raise an error if the maximum number of iterations was already reached
-            if (n == maxiter): raise RuntimeError("The Newton solver did not converge after %i iterations"%maxiter)
+#            if (n == maxiter): raise RuntimeError("The Newton solver did not converge after %i iterations"%maxiter)
 
             # Assemble the linearised system around u
             A, b = self.assemble_system()
@@ -94,8 +96,7 @@ class NonlinearEllipticSolver(object):
             F = self.lhs()
             F -= self.problem.rhs(self.Z)
             F = fd.assemble(F)
-            with F.dat.vec_ro as v:
-                print("-------- Residual norm = %.14e" % v.norm())
+            print("-------- Residual norm (in the L2 norm)  = %.14e" % fd.norm(F))
 #====================== TEST ========================================
 #            F_ = fd.inner(fd.grad(self.z), fd.grad(fd.TestFunction(self.Z))) * fd.dx
 #            F_ -= self.problem.rhs(self.Z)
@@ -105,18 +106,16 @@ class NonlinearEllipticSolver(object):
 #====================== TEST ========================================
 
             # Relative tolerance: compare relative to the current guess 
-#            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
-            p = 2 #FIXME: Compute with the Lp norm
-            p = str(p)
-            print("----- Computing with the %s norm", ("L"+p))
-            relerror = fd.norm(deltaz, norm_type="l"+p) / fd.norm(self.z, norm_type="l"+p)
-            print("--------- Relative error = ", relerror)
+            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
+            norm_type = "W^{1, %s}"%str(p) if self.formulation_u else "L^{%s} x W^{1,%s}"%(str(p/(p-1.)), str(p))
+            relerror = self.W1pnorm(deltaz, p) / self.W1pnorm(self.z, p)
+            print("--------- Relative error (in the %s norm) = "%norm_type, relerror)
             if (relerror < rtol):
                 print("Correction satisfied the relative tolerance!")
                 break
             # Absolute tolerance: distance of deltau to zero
-            abserror = fd.norm(deltaz, norm_type="l"+p)
-            print("--------- Absolute error = ", abserror)
+            abserror = self.W1pnorm(deltaz, p)
+            print("--------- Absolute error (in the %s) = "%norm_type, abserror)
             if (abserror < atol):
                 print("Correction satisfied the absolute tolerance!")
                 break
@@ -127,8 +126,9 @@ class NonlinearEllipticSolver(object):
         A = fd.assemble(J, bcs=self.bcs)
 
         if self.smoothing:
-            op = SmoothingOpVeeserZanotti
+            op = SmoothingOpVeeserZanotti(self.Z)
 #            def rhs_(test_f): return self.problem.rhs()
+#            b = op.apply(rhs_)
             b = op.apply(lambda test_f : self.problem.rhs(test_f.function_space()))
 #            b = op.apply(self.problem.rhs)
         else:
@@ -168,6 +168,15 @@ class NonlinearEllipticSolver(object):
         fields["v"] = v
         return fields
 
+    def W1pnorm(self, z, p):
+        if self.formulation_u:
+            return fd.assemble(fd.inner(fd.grad(z), fd.grad(z))**(p/2.) * fd.dx)**(1/p)
+        elif self.formulation_Su:
+            p_prime = p/(p-1.)
+            (S, u) = z.split()
+            S_norm = fd.assemble(fd.inner(S, S)**(p_prime/2.) * fd.dx)**(1/p_prime)
+            u_norm = fd.assemble(fd.inner(fd.grad(u), fd.grad(u))**(p/2.) * fd.dx)**(1/p)
+            return S_norm + u_norm
 
     def get_parameters(self):
         #LU for now I guess...
@@ -226,6 +235,111 @@ class ConformingSolver(NonlinearEllipticSolver):
         return F
 
 
-#class CrouzeixRaviartSolver(ConformingSolver): raise NotImplementedError
+class CrouzeixRaviartSolver(ConformingSolver):
 
-#class DGSolver(NonlinearEllipticSolver): raise NotImplementedError
+    def function_space(self, mesh, k):
+        return fd.FunctionSpace(mesh, "CR", k)
+
+class DGSolver(NonlinearEllipticSolver):
+
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="quadratic"):
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
+        self.penalty_form = penalty_form
+        assert penalty_form in ["quadratic", "plaw", "const_rel"], "I don't know that form of the penalty..."
+
+    def function_space(self, mesh, k):
+        return fd.FunctionSpace(mesh, "DG", k)
+
+    def lhs(self):
+
+        # Define functions and test functions
+        fields = self.split_variables(self.z)
+        u = fields["u"]
+        v = fields["v"]
+        S = fields.get("S")
+        T = fields.get("T")
+
+        # For the DG terms
+        alpha = 10. * self.k**2
+        n = fd.FacetNormal(self.Z.ufl_domain())
+        h = fd.CellDiameter(self.Z.ufl_domain())
+        U_jmp = 2. * fd.avg(fd.outer(u,n))
+        U_jmp_bdry = fd.outer(u, n)
+        jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
+        jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
+
+
+        if self.formulation_u:
+            G = self.problem.const_rel(fd.grad(u))
+        elif self.formulation_Su:
+            G = self.problem.const_rel(S)
+        else:
+            raise NotImplementedError
+
+        if self.formulation_u:
+            F = (
+                fd.inner(G, fd.grad(v)) * fd.dx # TODO: Need a different formulation for LDG
+                - fd.inner(fd.avg(G), 2*fd.avg(fd.outer(v, n))) * fd.dS
+                - fd.inner(G, fd.outer(v, n)) * fd.ds
+                + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
+                + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
+            )
+        elif self.formulation_Su:
+            F = (
+                -fd.inner(G, T) * fd.dx
+                + fd.inner(fd.grad(u), T) * fd.dx
+                - fd.inner(fd.avg(T), 2*fd.avg(fd.outer(u, n))) * fd.dS # Remove this one for IIDG
+                - fd.inner(T, fd.outer(u, n)) * fd.ds # Remove this one for IIDG
+                + fd.inner(S, fd.grad(v)) * fd.dx
+                - fd.inner(fd.avg(S), 2*fd.avg(fd.outer(v, n))) * fd.dS
+                - fd.inner(S, fd.outer(v, n)) * fd.ds
+                + alpha * inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
+                + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
+            )
+        else:
+            raise NotImplementedError
+        return F
+
+    def ip_penalty_jump(self, h_factor, vec, form="cr"):
+        """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
+        assert form in ["cr", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
+        U_jmp = h_factor * vec
+        if form == "cr" and self.formulation_u:
+            jmp_penalty = self.problem.const_rel(U_jmp)
+        if form == "plaw":
+            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
+            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
+            jmp_penalty = K_ * fd.inner(U_jmp, U_jmp) ** ((p-2.)/2.) * U_jmp
+        elif form == "quadratic":
+            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
+            jmp_penalty = K_ * U_jmp
+        return jmp_penalty
+
+
+    def W1pnorm(self, z, p):
+
+        # For the DG terms
+        alpha = 10. * self.k**2
+        n = fd.FacetNormal(self.Z.ufl_domain())
+        h = fd.CellDiameter(self.Z.ufl_domain())
+        if self.formulation_u:
+            U_jmp = 2. * fd.avg(fd.outer(z,n))
+            U_jmp_bdry = fd.outer(z, n)
+            jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
+            jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
+            broken_W1p = fd.assemble(fd.inner(fd.grad(z), fd.grad(z))**(p/2.) * fd.dx)
+            jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
+            jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
+            return (broken_W1p + jumps)**(1/p)
+        elif self.formulation_Su:
+            (S, u) = z.split()
+            U_jmp = 2. * fd.avg(fd.outer(u,n))
+            U_jmp_bdry = fd.outer(u, n)
+            jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
+            jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
+            p_prime = p/(p-1.)
+            S_norm = fd.assemble(fd.inner(S, S)**(p_prime/2.) * fd.dx)**(1/p_prime)
+            broken_W1p = fd.assemble(fd.inner(fd.grad(u), fd.grad(u))**(p/2.) * fd.dx)
+            jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(z)) *fd.dS)
+            jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, z) * fd.ds)
+            return S_norm + (broken_W1p + jumps)**(1/p)
