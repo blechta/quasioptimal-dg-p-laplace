@@ -127,10 +127,7 @@ class NonlinearEllipticSolver(object):
 
         if self.smoothing:
             op = SmoothingOpVeeserZanotti(self.Z)
-#            def rhs_(test_f): return self.problem.rhs()
-#            b = op.apply(rhs_)
-            b = op.apply(lambda test_f : self.problem.rhs(test_f.function_space()))
-#            b = op.apply(self.problem.rhs)
+            b = op.apply(lambda test_f : -self.lhs() + self.problem.rhs(self.Z)) #FIXME: Not working for some reason...
         else:
             b = -self.residual()
             b = fd.assemble(b)
