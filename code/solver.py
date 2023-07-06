@@ -262,7 +262,7 @@ class CrouzeixRaviartSolver(ConformingSolver):
 
 class DGSolver(NonlinearEllipticSolver):
 
-    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="quadratic"):
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel"):
         super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
         self.penalty_form = penalty_form
         assert penalty_form in ["quadratic", "plaw", "const_rel"], "I don't know that form of the penalty..."
@@ -320,11 +320,11 @@ class DGSolver(NonlinearEllipticSolver):
             raise NotImplementedError
         return F
 
-    def ip_penalty_jump(self, h_factor, vec, form="cr"):
+    def ip_penalty_jump(self, h_factor, vec, form="const_rel"):
         """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
-        assert form in ["cr", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
+        assert form in ["const_rel", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
         U_jmp = h_factor * vec
-        if form == "cr" and self.formulation_u:
+        if form == "const_rel" and self.formulation_u:
             jmp_penalty = self.problem.const_rel(U_jmp)
         if form == "plaw":
             p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent

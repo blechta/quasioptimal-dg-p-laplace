@@ -18,7 +18,7 @@ class PowerLawTest(NonlinearEllipticProblem):
         return fd.UnitSquareMesh(self.baseN, self.baseN, diagonal=self.diagonal)
 
     def const_rel(self, D):
-        return self.K * fd.inner(D, D) ** ((self.p - 2)/2.) * D
+        return self.K * fd.inner(D, D) ** ((float(self.p) - 2)/2.) * D
 
     def exact_solution(self, Z):
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     # Choose over which constitutive parameters we do continuation
     K_s = [1.0]
-    p_s = [2.0, 3.5, 5.]
+    p_s = [2.0, 3.0]
     continuation_params = {"p": p_s, "K": K_s}
 
     solver_.solve(continuation_params)
