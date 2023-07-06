@@ -126,9 +126,19 @@ class NonlinearEllipticSolver(object):
         A = fd.assemble(J, bcs=self.bcs)
 
         if self.smoothing:
+            def newton_rhs(v):
+                ### This works
+                nrhs = -fd.inner(fd.grad(self.z), fd.grad(v)) * fd.dx
+                x, y = fd.SpatialCoordinate(self.Z.ufl_domain())
+                u_ex = fd.sin(4*fd.pi*x) * y**2 * (1.-y)**2
+                nrhs += fd.inner(fd.grad(u_ex), fd.grad(v)) * fd.dx
+                ### This doesn't
+    #            nrhs = -self.lhs()
+    #            nrhs += self.problem.rhs(self.Z)
+                return nrhs
             op = SmoothingOpVeeserZanotti(self.Z)
-#            b = op.apply(lambda test_f : -self.lhs() + self.problem.rhs(self.Z)) #FIXME: Not working for some reason...
-            b = op.apply(lambda test_f : -self.residual())
+#            b = op.apply(lambda test_f : -self.residual())                 # This doesn't work
+            b = op.apply(newton_rhs)
         else:
             b = -self.residual()
             b = fd.assemble(b)
@@ -137,7 +147,7 @@ class NonlinearEllipticSolver(object):
 
     def residual(self):
 #        self.bcs.apply(self.z)
-        return self.lhs() #- self.problem.rhs(self.Z)
+        return self.lhs() - self.problem.rhs(self.Z)
 
 
     def get_jacobian(self):

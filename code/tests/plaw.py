@@ -30,8 +30,8 @@ class PowerLawTest(NonlinearEllipticProblem):
         sols = self.exact_solution(Z)
         v = fd.TestFunction(Z)
         S = self.const_rel(fd.grad(sols))
-        L = - fd.div(S) * v * fd.dx
-#        L = fd.inner(S, fd.grad(v)) * fd.dx
+#        L = - fd.div(S) * v * fd.dx
+        L = fd.inner(S, fd.grad(v)) * fd.dx
         return L
 
     def interpolate_initial_guess(self, z):
@@ -61,7 +61,7 @@ if __name__ == "__main__":
                     "DG": DGSolver}[args.disc]
     solver_ = solver_class(problem_, nref=args.nref, smoothing=args.smoothing)
 
-    problem_.interpolate_initial_guess(solver_.z)
+#    problem_.interpolate_initial_guess(solver_.z)
 
     solver_.solve()
 
