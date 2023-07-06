@@ -63,56 +63,85 @@ class NonlinearEllipticSolver(object):
         bcs = problem.bcs(Z)
         self.bcs = bcs
 
+        #Obtain parameters from the constitutive relation and make sure they are Constants
+        self.const_rel_params = {}
+        for param_str, param in self.problem.const_rel_params.items():
+            setattr(self, param_str, param)
+            if not isinstance(getattr(self,param_str), fd.Constant):
+                setattr(self, param_str, fd.Constant(getattr(self, param_str)))
+            self.const_rel_params[param_str] = getattr(self, param_str)
 
-    def solve(self, maxiter=3, atol=1e-8, rtol=1e-6):
-        """ Rudimentary implementation of Newton """
 
-        # The update
+    def solve(self, continuation_params, maxiter=20, atol=1e-8, rtol=1e-6):
+        """ Rudimentary implementation of Newton + continuation
+        'continuation_params' is a dictionary of the form {'param': param_list}
+        specifying a list for each parameter over which we iterate"""
+
+        # The Newton update
         deltaz = fd.Function(self.Z)
 
-        # Do the actual loop
-        for n in range(maxiter+1):
-            # Raise an error if the maximum number of iterations was already reached
-            if (n == maxiter): raise RuntimeError("The Newton solver did not converge after %i iterations"%maxiter)
+        # We will do continuation in the constitutive parameters
+        #Set all the initial parameters
+        for param_str, param_list in continuation_params.items():
+            getattr(self, param_str).assign(param_list[0])
 
-            # Assemble the linearised system around u
-            A, b = self.assemble_system()
+        # Continuation loop
+        counter = 0 # Otherwise it does the last solve twice
+        for param_str in continuation_params.keys():
+            for param in continuation_params[param_str][counter:]:
+                getattr(self, param_str).assign(param)
 
-            # Cast the matrix to a sparse format and use a sparse solver for
-            # the linear system. This is vastly faster than the dense
-            # alternative.
-            fd.warning(fd.BLUE % "Current Newton iteration: %i"%n)
-            fd.solve(A, deltaz, b, solver_parameters=self.get_parameters())
-#====================== TEST ========================================
-#            a_ = fd.inner(fd.grad(fd.TrialFunction(self.Z)), fd.grad(fd.TestFunction(self.Z))) * fd.dx
-#            L_ = -fd.inner(fd.grad(self.z), fd.grad(fd.TestFunction(self.Z))) * fd.dx
-#            L_ += self.problem.rhs(self.Z)
-#            fd.solve(a_ == L_, deltaz, bcs=self.bcs)
-#====================== TEST ========================================
+                output_info = "Solving for "
+                for param_ in continuation_params.keys():
+                    output_info += param_
+                    output_info += " = %.8f, "%float(getattr(self, param_))
+                    fd.warning(fd.RED % (output_info))
 
-            # Update the solution and check for convergence
-            self.z.assign(self.z + deltaz)
+                # Newton loop
+                for n in range(maxiter+1):
+                    # Raise an error if the maximum number of iterations was already reached
+                    if (n == maxiter): raise RuntimeError("The Newton solver did not converge after %i iterations"%maxiter)
 
-            # Print residual (not used for convergence criteria)
-            F = self.lhs(self.z, self.z_)
-            F -= self.problem.rhs(self.z_)
-            F = fd.assemble(F)
-            fd.warning(fd.BLUE % "--------- Residual norm (in the L2 norm)  = %.14e" % fd.norm(F))
+                    # Assemble the linearised system around u
+                    A, b = self.assemble_system()
 
-            # Relative tolerance: compare relative to the current guess 
-            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
-            norm_type = "W^{1, %s}"%str(p) if self.formulation_u else "L^{%s} x W^{1,%s}"%(str(p/(p-1.)), str(p))
-            relerror = self.W1pnorm(deltaz, p) / self.W1pnorm(self.z, p)
-            fd.warning(fd.BLUE % "--------- Relative error (in the %s norm) = " % norm_type + str(relerror))
-            if (relerror < rtol):
-                fd.warning(fd.GREEN % "Converged due to relative tolerance!")
-                break
-            # Absolute tolerance: distance of deltau to zero
-            abserror = self.W1pnorm(deltaz, p)
-            fd.warning(fd.BLUE % "--------- Absolute error (in the %s) = "%norm_type + str(abserror))
-            if (abserror < atol):
-                fd.warning(fd.GREEN % "Converged due to absolute tolerance!")
-                break
+                    # Cast the matrix to a sparse format and use a sparse solver for
+                    # the linear system. This is vastly faster than the dense
+                    # alternative.
+                    fd.warning(fd.BLUE % "Current Newton iteration: %i"%n)
+                    fd.solve(A, deltaz, b, solver_parameters=self.get_parameters())
+        #====================== TEST ========================================
+        #            a_ = fd.inner(fd.grad(fd.TrialFunction(self.Z)), fd.grad(fd.TestFunction(self.Z))) * fd.dx
+        #            L_ = -fd.inner(fd.grad(self.z), fd.grad(fd.TestFunction(self.Z))) * fd.dx
+        #            L_ += self.problem.rhs(self.Z)
+        #            fd.solve(a_ == L_, deltaz, bcs=self.bcs)
+        #====================== TEST ========================================
+
+                    # Update the solution and check for convergence
+                    self.z.assign(self.z + deltaz)
+
+                    # Print residual (not used for convergence criteria)
+                    F = self.lhs(self.z, self.z_)
+                    F -= self.problem.rhs(self.z_)
+                    F = fd.assemble(F)
+                    fd.warning(fd.BLUE % "--------- Residual norm (in the L2 norm)  = %.14e" % fd.norm(F))
+
+                    # Relative tolerance: compare relative to the current guess 
+                    p_ = float(self.problem.const_rel_params.get("p", 2.0)) # Get power-law exponent
+                    norm_type = "W^{1, %s}"%str(p_) if self.formulation_u else "L^{%s} x W^{1,%s}"%(str(p_/(p_-1.)), str(p_))
+                    relerror = self.W1pnorm(deltaz, p_) / self.W1pnorm(self.z, p_)
+                    fd.warning(fd.BLUE % "--------- Relative error (in the %s norm) = " % norm_type + str(relerror))
+                    if (relerror < rtol):
+                        fd.warning(fd.GREEN % "Converged due to relative tolerance!")
+                        break
+                    # Absolute tolerance: distance of deltau to zero
+                    abserror = self.W1pnorm(deltaz, p_)
+                    fd.warning(fd.BLUE % "--------- Absolute error (in the %s) = "%norm_type + str(abserror))
+                    if (abserror < atol):
+                        fd.warning(fd.GREEN % "Converged due to absolute tolerance!")
+                        break
+
+            counter = 1
 
 
     def assemble_system(self):

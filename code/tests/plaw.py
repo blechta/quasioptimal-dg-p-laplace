@@ -1,11 +1,9 @@
 import firedrake as fd
-#import numpy as np
 
 import argparse
 import sys
 sys.path.append('..')
 
-# importing
 from solver import NonlinearEllipticProblem, ConformingSolver, CrouzeixRaviartSolver, DGSolver
 
 class PowerLawTest(NonlinearEllipticProblem):
@@ -51,10 +49,11 @@ if __name__ == "__main__":
     parser.add_argument("--k", type=int, default=1)
     args, _ = parser.parse_known_args()
 
-    p = 2.0
-    K = 1.0
+    # Initialize values for the constitutive relation
+    p = fd.Constant(2.0)
+    K = fd.Constant(1.0)
 
-    problem_ = PowerLawTest(args.baseN, p, K, diagonal=args.diagonal)
+    problem_ = PowerLawTest(args.baseN, p=p, K=K, diagonal=args.diagonal)
     solver_class = {"CG": ConformingSolver,
                     "CR": CrouzeixRaviartSolver,
                     "DG": DGSolver}[args.disc]
@@ -62,12 +61,17 @@ if __name__ == "__main__":
 
     problem_.interpolate_initial_guess(solver_.z)
 
-    solver_.solve()
+    # Choose over which constitutive parameters we do continuation
+    K_s = [1.0]
+    p_s = [2.0, 3.5, 5.]
+    continuation_params = {"p": p_s, "K": K_s}
+
+    solver_.solve(continuation_params)
 
     u = solver_.z
     u_exact = fd.interpolate(problem_.exact_solution(solver_.Z), fd.FunctionSpace(u.ufl_domain(), "CG", args.k + 3))
     u_exact.rename("exact_solution")
-    print("W^{1, %s} distance to the exact solution = "%p, solver_.W1pnorm(u - u_exact, p))
+    print("W^{1, %s} distance to the exact solution = "%float(solver_.p), solver_.W1pnorm(u - u_exact, float(solver_.p)))
 
     if args.plots:
         fd.File("output/plaw_test.pvd").write(u, u_exact)
