@@ -81,7 +81,7 @@ class NonlinearEllipticSolver(object):
             # Cast the matrix to a sparse format and use a sparse solver for
             # the linear system. This is vastly faster than the dense
             # alternative.
-            print("Current Newton iteration: %i"%n)
+            fd.warning(fd.BLUE % "Current Newton iteration: %i"%n)
             fd.solve(A, deltaz, b, solver_parameters=self.get_parameters())
 #====================== TEST ========================================
 #            a_ = fd.inner(fd.grad(fd.TrialFunction(self.Z)), fd.grad(fd.TestFunction(self.Z))) * fd.dx
@@ -97,21 +97,21 @@ class NonlinearEllipticSolver(object):
             F = self.lhs(self.z, self.z_)
             F -= self.problem.rhs(self.z_)
             F = fd.assemble(F)
-            print("-------- Residual norm (in the L2 norm)  = %.14e" % fd.norm(F))
+            fd.warning(fd.BLUE % "--------- Residual norm (in the L2 norm)  = %.14e" % fd.norm(F))
 
             # Relative tolerance: compare relative to the current guess 
             p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
             norm_type = "W^{1, %s}"%str(p) if self.formulation_u else "L^{%s} x W^{1,%s}"%(str(p/(p-1.)), str(p))
             relerror = self.W1pnorm(deltaz, p) / self.W1pnorm(self.z, p)
-            print("--------- Relative error (in the %s norm) = "%norm_type, relerror)
+            fd.warning(fd.BLUE % "--------- Relative error (in the %s norm) = " % norm_type + str(relerror))
             if (relerror < rtol):
-                print("Correction satisfied the relative tolerance!")
+                fd.warning(fd.GREEN % "Converged due to relative tolerance!")
                 break
             # Absolute tolerance: distance of deltau to zero
             abserror = self.W1pnorm(deltaz, p)
-            print("--------- Absolute error (in the %s) = "%norm_type, abserror)
+            fd.warning(fd.BLUE % "--------- Absolute error (in the %s) = "%norm_type + str(abserror))
             if (abserror < atol):
-                print("Correction satisfied the absolute tolerance!")
+                fd.warning(fd.GREEN % "Converged due to absolute tolerance!")
                 break
 
 
