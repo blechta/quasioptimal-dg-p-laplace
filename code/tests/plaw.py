@@ -26,12 +26,11 @@ class PowerLawTest(NonlinearEllipticProblem):
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
         return fd.sin(4*fd.pi*x) * y**2 * (1.-y)**2
 
-    def rhs(self, Z):
-        sols = self.exact_solution(Z)
-        v = fd.TestFunction(Z)
+    def rhs(self, v):
+        sols = self.exact_solution(v.function_space())
         S = self.const_rel(fd.grad(sols))
-#        L = - fd.div(S) * v * fd.dx
-        L = fd.inner(S, fd.grad(v)) * fd.dx
+        L = - fd.div(S) * v * fd.dx
+#        L = fd.inner(S, fd.grad(v)) * fd.dx  # This one doesn't work for DG (which makes sense...)
         return L
 
     def interpolate_initial_guess(self, z):
@@ -61,7 +60,7 @@ if __name__ == "__main__":
                     "DG": DGSolver}[args.disc]
     solver_ = solver_class(problem_, nref=args.nref, smoothing=args.smoothing)
 
-#    problem_.interpolate_initial_guess(solver_.z)
+    problem_.interpolate_initial_guess(solver_.z)
 
     solver_.solve()
 

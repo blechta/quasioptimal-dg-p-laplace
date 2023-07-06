@@ -24,7 +24,7 @@ class NonlinearEllipticProblem(object):
 
     def const_rel(self, *args): raise NotImplementedError
 
-    def rhs(self, Z): raise NotImplementedError
+    def rhs(self, z_): raise NotImplementedError
 
 
 class NonlinearEllipticProblem_Su(NonlinearEllipticProblem):
@@ -58,6 +58,7 @@ class NonlinearEllipticSolver(object):
 
         z = fd.Function(Z, name="solution")
         self.z = z
+        self.z_ = fd.TestFunction(Z)
 
         bcs = problem.bcs(Z)
         self.bcs = bcs
@@ -72,7 +73,7 @@ class NonlinearEllipticSolver(object):
         # Do the actual loop
         for n in range(maxiter+1):
             # Raise an error if the maximum number of iterations was already reached
-#            if (n == maxiter): raise RuntimeError("The Newton solver did not converge after %i iterations"%maxiter)
+            if (n == maxiter): raise RuntimeError("The Newton solver did not converge after %i iterations"%maxiter)
 
             # Assemble the linearised system around u
             A, b = self.assemble_system()
@@ -93,17 +94,10 @@ class NonlinearEllipticSolver(object):
             self.z.assign(self.z + deltaz)
 
             # Print residual (not used for convergence criteria)
-            F = self.lhs()
-            F -= self.problem.rhs(self.Z)
+            F = self.lhs(self.z, self.z_)
+            F -= self.problem.rhs(self.z_)
             F = fd.assemble(F)
             print("-------- Residual norm (in the L2 norm)  = %.14e" % fd.norm(F))
-#====================== TEST ========================================
-#            F_ = fd.inner(fd.grad(self.z), fd.grad(fd.TestFunction(self.Z))) * fd.dx
-#            F_ -= self.problem.rhs(self.Z)
-#            F_ = fd.assemble(F_)
-#            with F_.dat.vec_ro as v:
-#                print("-------- (Dumb) Residual norm = %.14e" % v.norm())
-#====================== TEST ========================================
 
             # Relative tolerance: compare relative to the current guess 
             p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
@@ -127,14 +121,8 @@ class NonlinearEllipticSolver(object):
 
         if self.smoothing:
             def newton_rhs(v):
-                ### This works
-                nrhs = -fd.inner(fd.grad(self.z), fd.grad(v)) * fd.dx
-                x, y = fd.SpatialCoordinate(self.Z.ufl_domain())
-                u_ex = fd.sin(4*fd.pi*x) * y**2 * (1.-y)**2
-                nrhs += fd.inner(fd.grad(u_ex), fd.grad(v)) * fd.dx
-                ### This doesn't
-    #            nrhs = -self.lhs()
-    #            nrhs += self.problem.rhs(self.Z)
+                nrhs = -self.lhs(self.z, v)
+                nrhs += self.problem.rhs(v)
                 return nrhs
             op = SmoothingOpVeeserZanotti(self.Z)
 #            b = op.apply(lambda test_f : -self.residual())                 # This doesn't work
@@ -146,35 +134,29 @@ class NonlinearEllipticSolver(object):
         return A, b
 
     def residual(self):
-#        self.bcs.apply(self.z)
-        return self.lhs() - self.problem.rhs(self.Z)
+        return self.lhs(self.z, self.z_) - self.problem.rhs(self.z_)
 
 
     def get_jacobian(self):
         # Later we will need something other than Newton
-        J0 = fd.derivative(self.lhs(), self.z)
-
-#====================== TEST ========================================
-#        J0 = fd.inner(fd.grad(fd.TrialFunction(self.Z)), fd.grad(fd.TestFunction(self.Z))) * fd.dx
-#====================== TEST ========================================
+        J0 = fd.derivative(self.lhs(self.z, self.z_), self.z)
         return J0
 
 
-    def split_variables(self, z):
-        Z = self.Z
+    def split_variables(self, z, z_):
         fields = {}
         if self.problem.formulation == "u":
-            v = fd.TestFunction(Z)
             fields["u"] = z
+            fields["v"] = z_
         elif self.problem.formulation == "S-u":
             (S, u) = fd.split(z)
-            (T, v) = fd.split(fd.TestFunction(Z))
+            (T, v) = fd.split(z_)
             fields["u"] = u
+            fields["v"] = v
             fields["S"] = S
             fields["T"] = T
         else:
             raise NotImplementedError
-        fields["v"] = v
         return fields
 
     def W1pnorm(self, z, p):
@@ -208,17 +190,17 @@ class NonlinearEllipticSolver(object):
                   }
         return params
 
-    def lhs(self): raise NotImplementedError
+    def lhs(self, z, z_): raise NotImplementedError
 
 class ConformingSolver(NonlinearEllipticSolver):
 
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "CG", k)
 
-    def lhs(self):
+    def lhs(self, z, z_):
 
         # Define functions and test functions
-        fields = self.split_variables(self.z)
+        fields = self.split_variables(z, z_)
         u = fields["u"]
         v = fields["v"]
         S = fields.get("S")
@@ -259,10 +241,10 @@ class DGSolver(NonlinearEllipticSolver):
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "DG", k)
 
-    def lhs(self):
+    def lhs(self, z, z_):
 
         # Define functions and test functions
-        fields = self.split_variables(self.z)
+        fields = self.split_variables(z, z_)
         u = fields["u"]
         v = fields["v"]
         S = fields.get("S")
