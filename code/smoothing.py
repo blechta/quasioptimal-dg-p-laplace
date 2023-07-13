@@ -102,6 +102,24 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
 
         return result
 
+    def vertex_indices_to_p1_dofs(self, *args):
+        P1, _ = self.spaces
+        map_inds = np.vectorize(P1.dm.getSection().getOffset, otypes=[utils.IntType])
+        perm = map_inds(np.arange(self.v_start, self.v_end, dtype=utils.IntType))
+        perm = np.argsort(perm)
+        return self.to_is(*(arr[perm] for arr in args))
+
+    def facet_indices_to_fb_dofs(self, *args):
+        _, FB = self.spaces
+        map_inds = np.vectorize(FB.dm.getSection().getOffset, otypes=[utils.IntType])
+        perm = map_inds(np.arange(self.f_start, self.f_end, dtype=utils.IntType))
+        perm = np.argsort(perm)
+        return self.to_is(*(arr[perm] for arr in args))
+
+    @staticmethod
+    def to_is(*args):
+        return [PETSc.IS().createGeneral(arr) for arr in args]
+
 
 class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
 
@@ -114,7 +132,7 @@ class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
         f_start, f_end = self.f_start, self.f_end
         v_start, v_end = self.v_start, self.v_end
         facets, cone, first_cell = self.facets, self.cone, self.first_cell
-        (P1, FB), CR = self.spaces, self.V
+        CR = self.V
 
         # Compute facets in the "first cell" of each vertex
         F12 = [[f for f in facets(first_cell(v)) if v in cone(f)] for v in range(v_start, v_end)]
@@ -145,33 +163,11 @@ class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
         FF23 = map_vals(FF23)
 
         # Map vertex indices to P1 dofs
-        map_inds = np.vectorize(P1.dm.getSection().getOffset, otypes=[utils.IntType])
-        perm = map_inds(np.arange(v_start, v_end, dtype=utils.IntType))
-        perm = np.argsort(perm)
-        F1 = F1[perm]
-        F2 = F2[perm]
-        F3 = F3[perm]
+        F1, F2, F3 = self.vertex_indices_to_p1_dofs(F1, F2, F3)
 
         # Map facet indices to FB dofs
-        map_inds = np.vectorize(FB.dm.getSection().getOffset, otypes=[utils.IntType])
-        perm = map_inds(np.arange(f_start, f_end, dtype=utils.IntType))
-        perm = np.argsort(perm)
-        FF11 = FF11[perm]
-        FF12 = FF12[perm]
-        FF13 = FF13[perm]
-        FF21 = FF21[perm]
-        FF22 = FF22[perm]
-        FF23 = FF23[perm]
-
-        F1 = PETSc.IS().createGeneral(F1)
-        F2 = PETSc.IS().createGeneral(F2)
-        F3 = PETSc.IS().createGeneral(F3)
-        FF11 = PETSc.IS().createGeneral(FF11)
-        FF12 = PETSc.IS().createGeneral(FF12)
-        FF13 = PETSc.IS().createGeneral(FF13)
-        FF21 = PETSc.IS().createGeneral(FF21)
-        FF22 = PETSc.IS().createGeneral(FF22)
-        FF23 = PETSc.IS().createGeneral(FF23)
+        FF11, FF12, FF13, FF21, FF22, FF23 = \
+            self.facet_indices_to_fb_dofs(FF11, FF12, FF13, FF21, FF22, FF23)
 
         coeffs1 = [(F1, +1), (F2, +1), (F3, -1)]
         coeffs2 = [(None, 3/2),
@@ -264,29 +260,11 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         FF22[bc_facets-f_start] = -1
 
         # Map vertex indices to P1 dofs
-        map_inds = np.vectorize(P1.dm.getSection().getOffset, otypes=[utils.IntType])
-        perm = map_inds(np.arange(v_start, v_end, dtype=utils.IntType))
-        perm = np.argsort(perm)
-        F = F[perm]
+        F, = self.vertex_indices_to_p1_dofs(F)
 
         # Map facet indices to FB dofs
-        map_inds = np.vectorize(FB.dm.getSection().getOffset, otypes=[utils.IntType])
-        perm = map_inds(np.arange(f_start, f_end, dtype=utils.IntType))
-        perm = np.argsort(perm)
-        FF1 = FF1[perm]
-        FF2 = FF2[perm]
-        FF11 = FF11[perm]
-        FF12 = FF12[perm]
-        FF21 = FF21[perm]
-        FF22 = FF22[perm]
-
-        F = PETSc.IS().createGeneral(F)
-        FF1 = PETSc.IS().createGeneral(FF1)
-        FF2 = PETSc.IS().createGeneral(FF2)
-        FF11 = PETSc.IS().createGeneral(FF11)
-        FF12 = PETSc.IS().createGeneral(FF12)
-        FF21 = PETSc.IS().createGeneral(FF21)
-        FF22 = PETSc.IS().createGeneral(FF22)
+        FF1, FF2, FF11, FF12, FF21, FF22 = \
+            self.facet_indices_to_fb_dofs(FF1, FF2, FF11, FF12, FF21, FF22)
 
         coeffs1 = [(F, +1)]
         coeffs2 = [(FF1, -3/4), (FF2, -3/4),
