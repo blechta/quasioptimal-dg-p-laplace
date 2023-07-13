@@ -293,20 +293,6 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
                    (FF11, 3/8), (FF12, 3/8), (FF21, 3/8), (FF22, 3/8)]
         return coeffs1, coeffs2
 
-    def assemble_rhs(self, rhs):
-        f1, f2 = super().assemble_rhs(rhs)
-        bc1, bc2 = self.bcs_rhs
-        bc1.apply(f1)
-        bc2.apply(f2)
-        return f1, f2
-
-    @utils.cached_property
-    def bcs_rhs(self):
-        P1, FB = self.spaces
-        bc1 = DirichletBC(P1, Constant(0.), "on_boundary")
-        bc2 = DirichletBC(FB, Constant(0.), "on_boundary")
-        return bc1, bc2
-
 
 def isaxpy_or_axpy(vfull, iset, alpha, vreduced):
     """Perform VecISAXPY or VecAXPY if iset is None"""
