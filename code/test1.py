@@ -96,8 +96,9 @@ def main():
     u_cr = solve(mesh, "CR")
     u_cr_sth = solve(mesh, "CR", smoothing=True)
     u_dg = solve(mesh, "DG")
+    u_dg_sth = solve(mesh, "DG", smoothing=True)
 
-    funcs = exact_solution(mesh), u_cg, u_cr, u_cr_sth, u_dg
+    funcs = exact_solution(mesh), u_cg, u_cr, u_cr_sth, u_dg, u_dg_sth
     fd.File("test1.pvd").write(*funcs)
 
 
