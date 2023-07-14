@@ -7,6 +7,7 @@ class SmoothingOpBase(object):
 
     def __init__(self, mesh):
         assert mesh.topological_dimension() == 2, '3d not yet implemented'
+        self.mesh = mesh
         self.dm = mesh.topology_dm
         self.v_start, self.v_end = mesh.topology_dm.getDepthStratum(0)
         self.c_start, self.c_end = mesh.topology_dm.getHeightStratum(0)
@@ -46,6 +47,18 @@ class SmoothingOpBase(object):
             assert c in (c1 for v in self.vertices(c) for c1 in self.cells(v))
         for v in range(self.v_start, self.v_end):
             assert v in (v1 for c in self.cells(v) for v1 in self.vertices(c))
+
+    def bc_facets(self):
+        return self.mesh.exterior_facets.facets
+
+    def bc_vertices(self):
+        bc_facets = self.bc_facets()
+        bc_vertices = {v for f in bc_facets for v in self.cone(f)}
+        num_bc_vertices = len(bc_vertices)
+        bc_vertices = np.fromiter(bc_vertices, dtype=utils.IntType)
+        bc_vertices = np.unique(bc_vertices)
+        assert bc_vertices.size == num_bc_vertices
+        return bc_vertices
 
 
 class SmoothingOpVeeserZanotti(SmoothingOpBase):
@@ -102,14 +115,14 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
 
         return result
 
-    def vertex_indices_to_p1_dofs(self, *args):
+    def permute_vertex_indexed_to_p1(self, *args):
         P1, _ = self.spaces
         map_inds = np.vectorize(P1.dm.getSection().getOffset, otypes=[utils.IntType])
         perm = map_inds(np.arange(self.v_start, self.v_end, dtype=utils.IntType))
         perm = np.argsort(perm)
         return self.to_is(*(arr[perm] for arr in args))
 
-    def facet_indices_to_fb_dofs(self, *args):
+    def permute_facet_indexed_to_fb(self, *args):
         _, FB = self.spaces
         map_inds = np.vectorize(FB.dm.getSection().getOffset, otypes=[utils.IntType])
         perm = map_inds(np.arange(self.f_start, self.f_end, dtype=utils.IntType))
@@ -132,48 +145,62 @@ class SmoothingOpVeeserZanottiCR(SmoothingOpVeeserZanotti):
         f_start, f_end = self.f_start, self.f_end
         v_start, v_end = self.v_start, self.v_end
         facets, cone, first_cell = self.facets, self.cone, self.first_cell
-        CR = self.V
+
+        # Compute boundary entities
+        bc_facets = self.bc_facets()
+        bc_vertices = self.bc_vertices()
 
         # Compute facets in the "first cell" of each vertex
         F12 = [[f for f in facets(first_cell(v)) if v in cone(f)] for v in range(v_start, v_end)]
         F3 = [[f for f in facets(first_cell(v)) if v not in cone(f)] for v in range(v_start, v_end)]
-        F1 = [ff[0] for ff in F12]  # first adjacent facet
-        F2 = [ff[1] for ff in F12]  # second adjacent facet
-        F3 = [ff[0] for ff in F3]   # opposite facet
+        F12 = np.array(F12, dtype=utils.IntType)
+        F3 = np.array(F3, dtype=utils.IntType)
+        F1 = F12[:, 0]  # first adjacent facet
+        F2 = F12[:, 1]  # second adjacent facet
+        F3 = F3[:, 0]   # opposite facet
+
+        # Part that is identity modulo BC
+        FF0 = np.arange(f_start, f_end, dtype=utils.IntType)
+
+        # Translate facet indices to CR dofs and apply BC
+        F1, F2, F3, FF0 = self.facets_to_cr_dofs(F1, F2, F3, FF0)
+        F1[bc_vertices-v_start] = -1
+        F2[bc_vertices-v_start] = -1
+        F3[bc_vertices-v_start] = -1
+        FF0[bc_facets-f_start] = -1
 
         # Compose F1, F2, F3 with v0(f), v1(f), where v0, v1 give
         # vertices of a given facet
-        FF11 = [F1[cone(f)[0]-v_start] for f in range(f_start, f_end)]
-        FF12 = [F2[cone(f)[0]-v_start] for f in range(f_start, f_end)]
-        FF13 = [F3[cone(f)[0]-v_start] for f in range(f_start, f_end)]
-        FF21 = [F1[cone(f)[1]-v_start] for f in range(f_start, f_end)]
-        FF22 = [F2[cone(f)[1]-v_start] for f in range(f_start, f_end)]
-        FF23 = [F3[cone(f)[1]-v_start] for f in range(f_start, f_end)]
+        facet_vertices = [cone(f) for f in range(f_start, f_end)]
+        facet_vertices = np.array(facet_vertices, dtype=utils.IntType)
+        FF11 = F1[facet_vertices[:, 0]-v_start]
+        FF12 = F2[facet_vertices[:, 0]-v_start]
+        FF13 = F3[facet_vertices[:, 0]-v_start]
+        FF21 = F1[facet_vertices[:, 1]-v_start]
+        FF22 = F2[facet_vertices[:, 1]-v_start]
+        FF23 = F3[facet_vertices[:, 1]-v_start]
+        FF11[bc_facets-f_start] = -1
+        FF12[bc_facets-f_start] = -1
+        FF13[bc_facets-f_start] = -1
+        FF21[bc_facets-f_start] = -1
+        FF22[bc_facets-f_start] = -1
+        FF23[bc_facets-f_start] = -1
 
-        # Map facet indices to CR dofs
-        map_vals = np.vectorize(CR.dm.getSection().getOffset, otypes=[utils.IntType])
-        F1 = map_vals(F1)
-        F2 = map_vals(F2)
-        F3 = map_vals(F3)
-        FF11 = map_vals(FF11)
-        FF12 = map_vals(FF12)
-        FF13 = map_vals(FF13)
-        FF21 = map_vals(FF21)
-        FF22 = map_vals(FF22)
-        FF23 = map_vals(FF23)
-
-        # Map vertex indices to P1 dofs
-        F1, F2, F3 = self.vertex_indices_to_p1_dofs(F1, F2, F3)
-
-        # Map facet indices to FB dofs
-        FF11, FF12, FF13, FF21, FF22, FF23 = \
-            self.facet_indices_to_fb_dofs(FF11, FF12, FF13, FF21, FF22, FF23)
+        # Map mesh entity indices to dofs of corresponding spaces
+        F1, F2, F3 = self.permute_vertex_indexed_to_p1(F1, F2, F3)
+        FF0, FF11, FF12, FF13, FF21, FF22, FF23 = \
+            self.permute_facet_indexed_to_fb(FF0, FF11, FF12, FF13, FF21, FF22, FF23)
 
         coeffs1 = [(F1, +1), (F2, +1), (F3, -1)]
-        coeffs2 = [(None, 3/2),
+        coeffs2 = [(FF0, 3/2),
                    (FF11, -3/4), (FF12, -3/4), (FF13, +3/4),
                    (FF21, -3/4), (FF22, -3/4), (FF23, +3/4)]
         return coeffs1, coeffs2
+
+    def facets_to_cr_dofs(self, *args):
+        CR = self.V
+        map_vals = np.vectorize(CR.dm.getSection().getOffset, otypes=[utils.IntType])
+        return (map_vals(arr) for arr in args)
 
 
 class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
@@ -189,6 +216,10 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         v_start, v_end = self.v_start, self.v_end
         facet_cells, cone, first_cell = self.facet_cells, self.cone, self.first_cell
         (P1, FB), DG1 = self.spaces, self.V
+
+        # Compute boundary entities
+        bc_facets = self.bc_facets()
+        bc_vertices = self.bc_vertices()
 
         # Construct mapping from cell and vertex to DG1 dof
         f2p = DG1.mesh().cell_closure[:, -1]
@@ -209,14 +240,6 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         Kvertices = np.array([fvertices[p2f[c]] for c in Kv])
         mask = Kvertices.T == np.arange(v_start, v_end)
         local_v_in_Kv = mask.argmax(axis=0)
-
-        # Compute boundary entities
-        bc_facets = DG1.mesh().exterior_facets.facets
-        bc_vertices = {v for f in bc_facets for v in cone(f)}
-        num_bc_vertices = len(bc_vertices)
-        bc_vertices = np.fromiter(bc_vertices, dtype=utils.IntType)
-        bc_vertices = np.unique(bc_vertices)
-        assert bc_vertices.size == num_bc_vertices
 
         # Map cell and local vertex index pairs to DG1 dofs
         F = map_vals(Kv, local_v_in_Kv)
@@ -259,12 +282,10 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         FF21[bc_facets-f_start] = -1
         FF22[bc_facets-f_start] = -1
 
-        # Map vertex indices to P1 dofs
-        F, = self.vertex_indices_to_p1_dofs(F)
-
-        # Map facet indices to FB dofs
+        # Map mesh entity indices to dofs of corresponding spaces
+        F, = self.permute_vertex_indexed_to_p1(F)
         FF1, FF2, FF11, FF12, FF21, FF22 = \
-            self.facet_indices_to_fb_dofs(FF1, FF2, FF11, FF12, FF21, FF22)
+            self.permute_facet_indexed_to_fb(FF1, FF2, FF11, FF12, FF21, FF22)
 
         coeffs1 = [(F, +1)]
         coeffs2 = [(FF1, -3/4), (FF2, -3/4),

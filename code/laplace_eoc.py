@@ -28,7 +28,7 @@ def exact_solution(mesh, smooth=False): #FIXME: What's a good way of deciding wh
 
 def lhs(u, v):
     if v.function_space().ufl_element().family() == 'Discontinuous Lagrange':
-        mesh = u.function_space().mesh()
+        mesh = v.function_space().mesh()
         n = fd.FacetNormal(mesh)
         h = fd.CellDiameter(mesh)
         h_avg = (h('+') + h('-'))/2
