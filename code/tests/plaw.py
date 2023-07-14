@@ -63,7 +63,9 @@ if __name__ == "__main__":
 
     # Choose over which constitutive parameters we do continuation
     K_s = [1.0]
-    p_s = [2.0, 3.0]
+    p_s = [2.0, 2.5]
+    p_s = [2.0, 1.9]
+    p_s = [2.0]
     continuation_params = {"p": p_s, "K": K_s}
 
     solver_.solve(continuation_params)

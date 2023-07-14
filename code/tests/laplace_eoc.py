@@ -3,6 +3,8 @@ import numpy as np
 
 import argparse
 import pprint
+import sys
+sys.path.append('..')
 
 from smoothing import SmoothingOpVeeserZanotti
 
@@ -12,7 +14,7 @@ def cutoff(r):
 
     return Heaviside1
 
-def exact_solution(mesh, smooth=False): #FIXME: What's a good way of deciding which solution? rhs doesn't take additional parameters
+def exact_solution(mesh, smooth=True): #FIXME: What's a good way of deciding which solution? rhs doesn't take additional parameters
     # Smooth exact solutions
     x, y = fd.SpatialCoordinate(mesh)
     if smooth:
@@ -22,7 +24,7 @@ def exact_solution(mesh, smooth=False): #FIXME: What's a good way of deciding wh
         r_2 = (x-0.5)**2 + (y-0.5)**2
         solution = fd.sqrt(-(fd.ln(r_2)))*cutoff(r_2**0.5)
         #============== TEST =========================
-        fd.File("test_eoc.pvd").write(fd.interpolate(solution, fd.FunctionSpace(mesh, "CG", 1)))
+#        fd.File("output/test_eoc.pvd").write(fd.interpolate(solution, fd.FunctionSpace(mesh, "CG", 1)))
         #=============================================
     return solution
 
