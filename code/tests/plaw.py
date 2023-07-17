@@ -26,9 +26,35 @@ class PowerLawTest(NonlinearEllipticProblem):
 
     def rhs(self, v):
         sols = self.exact_solution(v.function_space())
-        S = self.const_rel(fd.grad(sols))
-        L = - fd.div(S) * v * fd.dx
-#        L = fd.inner(S, fd.grad(v)) * fd.dx  # This one doesn't work for DG (which makes sense...)
+#        S = self.const_rel(fd.grad(sols))
+#        L = - fd.div(S) * v * fd.dx
+#        L = fd.inner(S, fd.grad(v)) * fd.dx # Should this work for DG? I think not
+#=========================== TEST (try IP Laplace) =========================================================
+        mesh = v.function_space().mesh()
+        n = fd.FacetNormal(mesh)
+        h = fd.CellDiameter(mesh)
+#        alpha = 10.
+#        S = fd.grad(sols)
+#        L = (
+#            fd.inner(S, fd.grad(v)) * fd.dx
+#            - fd.inner(fd.avg(S), 2*fd.avg(fd.outer(v, n))) * fd.dS
+#            - fd.inner(2.*fd.avg(fd.outer(sols,n)), fd.avg(fd.grad(v))) * fd.dS
+#            - fd.inner(S, fd.outer(v, n)) * fd.ds
+#            + (alpha/fd.avg(h)) * fd.inner(2*fd.avg(fd.outer(sols, n)), 2*fd.avg(fd.outer(v, n))) * fd.dS
+#            + (alpha/h) * fd.inner(fd.outer(sols,n), fd.outer(v,n)) * fd.ds
+#             )
+############# Jan's bilinear form ================================
+        h_avg = (h('+') + h('-'))/2
+        alpha = 4.0  # hard-coded param
+        gamma = 8.0  # hard-coded param
+        L = fd.dot(fd.grad(v), fd.grad(sols))*fd.dx \
+          - fd.dot(fd.avg(fd.grad(v)), fd.jump(sols, n))*fd.dS \
+          - fd.dot(fd.jump(v, n), fd.avg(fd.grad(sols)))*fd.dS \
+          + alpha/h_avg*fd.dot(fd.jump(v, n), fd.jump(sols, n))*fd.dS \
+          - fd.dot(fd.grad(v), sols*n)*fd.ds \
+          - fd.dot(v*n, fd.grad(sols))*fd.ds \
+          + gamma/h*v*sols*fd.ds
+#=========================== TEST (end) =========================================================
         return L
 
     def interpolate_initial_guess(self, z):
@@ -71,8 +97,9 @@ if __name__ == "__main__":
     solver_.solve(continuation_params)
 
     u = solver_.z
-    u_exact = fd.interpolate(problem_.exact_solution(solver_.Z), fd.FunctionSpace(u.ufl_domain(), "CG", args.k + 3))
-    u_exact.rename("exact_solution")
+#    u_exact = fd.interpolate(problem_.exact_solution(solver_.Z), fd.FunctionSpace(u.ufl_domain(), "CG", args.k + 3))
+#    u_exact.rename("exact_solution")
+    u_exact = problem_.exact_solution(solver_.Z)
     print("W^{1, %s} distance to the exact solution = "%float(solver_.p), solver_.W1pnorm(u - u_exact, float(solver_.p)))
 
     if args.plots:

@@ -50,6 +50,9 @@ def lhs(u, v):
 def rhs(test_function):
     solution = exact_solution(test_function.ufl_domain())
     rhs = lhs(solution, test_function)
+#=================== TEST: If I uncomment this line, we should get zero immediately =====================
+#    rhs -= lhs(solution, test_function)
+#=================== TEST ===================================================================
     return rhs
 
 def compute_traces(u):
@@ -95,6 +98,10 @@ def solve_laplace(resolution, space="CR", smoothing=False):
     err_l2, err_h1 = compute_errors(u)
 
     errors = [j,t,err_l2,err_h1]
+#============== TEST ============================================
+#    fd.File("output/test_eoc.pvd").write(u)
+#    print(fd.norm(u, norm_type="L2"))
+#================================================================
 
     return u, errors
 
