@@ -270,6 +270,7 @@ class DGSolver(NonlinearEllipticSolver):
     def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel"):
         super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
         self.penalty_form = penalty_form
+        self.bcs = None
         assert penalty_form in ["quadratic", "plaw", "const_rel"], "I don't know that form of the penalty..."
 
     def function_space(self, mesh, k):
