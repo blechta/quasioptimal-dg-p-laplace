@@ -2,7 +2,7 @@
 set -e
 
 # Select image
-IMAGE="fd:paper-smoothing-op"  # FIXME: currently a custom firedrake tag
+IMAGE="firedrakeproject/firedrake@sha256:cdc466deb113f568136af0e1ce3bb9a64205ab073f13f9abfb9862ff309bbfbe"  # 2023-04-09T02:02:37.387618717Z
 
 THISDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 CONTAINER_MOUNT_POINT="/home/firedrake/shared"
