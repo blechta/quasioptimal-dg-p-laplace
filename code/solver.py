@@ -60,8 +60,8 @@ class NonlinearEllipticSolver(object):
         self.z = z
         self.z_ = fd.TestFunction(Z)
 
-        bcs = problem.bcs(Z)
-        self.bcs = bcs
+        # FIXME: This has to be overloaded for a mixed method
+        self.bcs = problem.bcs(Z)  # This is overloaded in DGSolver
 
         #Obtain parameters from the constitutive relation and make sure they are Constants
         self.const_rel_params = {}
@@ -72,13 +72,10 @@ class NonlinearEllipticSolver(object):
             self.const_rel_params[param_str] = getattr(self, param_str)
 
 
-    def solve(self, continuation_params, maxiter=20, atol=1e-8, rtol=1e-6):
+    def solve(self, continuation_params):
         """ Rudimentary implementation of Newton + continuation
         'continuation_params' is a dictionary of the form {'param': param_list}
         specifying a list for each parameter over which we iterate"""
-
-        # The Newton update
-        deltaz = fd.Function(self.Z)
 
         # We will do continuation in the constitutive parameters
         #Set all the initial parameters
@@ -97,78 +94,33 @@ class NonlinearEllipticSolver(object):
                     output_info += " = %.8f, "%float(getattr(self, param_))
                     fd.warning(fd.RED % (output_info))
 
-                # Newton loop
-                for n in range(maxiter+1):
-                    # Raise an error if the maximum number of iterations was already reached
-                    if (n == maxiter): raise RuntimeError("The Newton solver did not converge after %i iterations"%maxiter)
-
-                    # Assemble the linearised system around u
-                    A, b = self.assemble_system()
-
-                    # Cast the matrix to a sparse format and use a sparse solver for
-                    # the linear system. This is vastly faster than the dense
-                    # alternative.
-                    fd.warning(fd.BLUE % "Current Newton iteration: %i"%n)
-                    fd.solve(A, deltaz, b, solver_parameters=self.get_parameters())
-        #====================== TEST ========================================
-        #            a_ = fd.inner(fd.grad(fd.TrialFunction(self.Z)), fd.grad(fd.TestFunction(self.Z))) * fd.dx
-        #            L_ = -fd.inner(fd.grad(self.z), fd.grad(fd.TestFunction(self.Z))) * fd.dx
-        #            L_ += self.problem.rhs(self.Z)
-        #            fd.solve(a_ == L_, deltaz, bcs=self.bcs)
-        #====================== TEST ========================================
-
-                    # Update the solution and check for convergence
-                    self.z.assign(self.z + deltaz)
-
-                    # Print residual (not used for convergence criteria)
-                    F = self.lhs(self.z, self.z_)
-                    F -= self.problem.rhs(self.z_)
-                    F = fd.assemble(F)
-                    fd.warning(fd.BLUE % "--------- Residual norm (in the L2 norm)  = %.14e" % fd.norm(F))
-
-                    # Relative tolerance: compare relative to the current guess 
-                    p_ = float(self.problem.const_rel_params.get("p", 2.0)) # Get power-law exponent
-                    norm_type = "W^{1, %s}"%str(p_) if self.formulation_u else "L^{%s} x W^{1,%s}"%(str(p_/(p_-1.)), str(p_))
-                    relerror = self.W1pnorm(deltaz, p_) / self.W1pnorm(self.z, p_)
-                    fd.warning(fd.BLUE % "--------- Relative error (in the %s norm) = " % norm_type + str(relerror))
-                    if (relerror < rtol):
-                        fd.warning(fd.GREEN % "Converged due to relative tolerance!")
-                        break
-                    # Absolute tolerance: distance of deltau to zero
-                    abserror = self.W1pnorm(deltaz, p_)
-                    fd.warning(fd.BLUE % "--------- Absolute error (in the %s) = "%norm_type + str(abserror))
-                    if (abserror < atol):
-                        fd.warning(fd.GREEN % "Converged due to absolute tolerance!")
-                        break
+                # Run SNES
+                self.nonlinear_variational_solver.solve()
 
             counter = 1
 
 
-    def assemble_system(self):
-        J = self.get_jacobian()
-        A = fd.assemble(J, bcs=self.bcs)
+    @fd.utils.cached_property
+    def nonlinear_variational_solver(self):
 
         if self.smoothing:
-            def newton_rhs(v):
-                nrhs = -self.lhs(self.z, v)
-#================== TEST (uncommenting this should give immediately zero ==================================================
-#                nrhs = -self.lhs(self.problem.exact_solution(v.function_space()), v)
-#                interpolated_exact_sols = fd.Function(v.function_space()).interpolate(self.problem.exact_solution(v.function_space()))
-#                nrhs = -self.lhs(interpolated_exact_sols, v)
-#================== TEST ==================================================
-                nrhs += self.problem.rhs(v)
-                return nrhs
+            F = self.lhs(self.z, self.z_)
             op = SmoothingOpVeeserZanotti(self.Z)
-#            b = op.apply(lambda test_f : -self.residual())                 # This doesn't work
-            b = op.apply(newton_rhs)
+            temp = fd.Function(self.Z)
+            def post_function_callback(_, residual):
+                # FIXME: This is constant along Newton: We can cache this!
+                op.apply(self.problem.rhs, result=temp)
+                with temp.dat.vec_ro as v:
+                    residual.axpy(-1, v)
         else:
-            b = -self.residual()
-            b = fd.assemble(b)
+            F = self.lhs(self.z, self.z_) - self.problem.rhs(self.z_)
+            post_function_callback = None
 
-        return A, b
-
-    def residual(self):
-        return self.lhs(self.z, self.z_) - self.problem.rhs(self.z_)
+        problem = fd.NonlinearVariationalProblem(F, self.z, bcs=self.bcs, J=self.get_jacobian())
+        solver = fd.NonlinearVariationalSolver(problem,
+                                               post_function_callback=post_function_callback,
+                                               solver_parameters=self.get_parameters())
+        return solver
 
 
     def get_jacobian(self):
@@ -207,11 +159,13 @@ class NonlinearEllipticSolver(object):
         #LU for now I guess...
         params = {"snes_monnitor": None,
                   "snes_converged_reason": None,
-                  "snes_max_it": 120,
+                  "snes_max_it": 20,
                   "snes_atol": 1e-8,
-                  "snes_rtol": 1e-7,
+                  "snes_rtol": 1e-6,
                   "snes_dtol": 1e10,
-                  "snes_linesearch_type": "nleqerr",
+                  "snes_type": "newtonls",
+                  "snes_linesearch_type": "none",
+                  #"snes_linesearch_type": "nleqerr",
                   "ksp_type": "preonly",
                   "pc_type": "lu",
                   "ksp_converged_reason": None,
