@@ -85,14 +85,21 @@ def solve_laplace(resolution, space="CR", smoothing=False):
         bcs = fd.DirichletBC(Z, fd.Constant(0.), "on_boundary")
 
     if smoothing:
+        F = lhs(u, v)
         op = SmoothingOpVeeserZanotti(Z)
-        b = op.apply(rhs)
+        temp = fd.Function(Z)
+        def post_function_callback(_, residual):
+            op.apply(rhs, result=temp)
+            with temp.dat.vec_ro as v:
+                residual.axpy(-1, v)
     else:
-        b = fd.assemble(rhs(v))
+        F = lhs(u, v) - rhs(v)
+        post_function_callback = None
 
-    a = lhs(u, v)
-    A = fd.assemble(fd.derivative(a, u), bcs=bcs)
-    fd.solve(A, u, b)
+    problem = fd.NonlinearVariationalProblem(F, u, bcs=bcs)
+    solver = fd.NonlinearVariationalSolver(problem,
+                                           post_function_callback=post_function_callback)
+    solver.solve()
 
     j, t = compute_traces(u)
     err_l2, err_h1 = compute_errors(u)
