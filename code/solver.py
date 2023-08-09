@@ -105,16 +105,17 @@ class NonlinearEllipticSolver(object):
     def nonlinear_variational_solver(self):
 
         if self.smoothing:
-            F = self.lhs(self.z, self.z_)
+            # Precompute contribution from smoothed RHS
             op = SmoothingOpVeeserZanotti(self.Z)
-            temp = fd.Function(self.Z)
+            rhs = op.apply(self.problem.rhs)
+            for bc in self.bcs:
+                bc.zero(rhs)
+            rhs.dat *= -1
+
+            F = self.lhs(self.z, self.z_)
             def post_function_callback(_, residual):
-                # FIXME: This is constant along Newton: We can cache this!
-                op.apply(self.problem.rhs, result=temp)
-                for bc in self.bcs:
-                    bc.zero(temp)
-                with temp.dat.vec_ro as v:
-                    residual.axpy(-1, v)
+                with rhs.dat.vec_ro as v:
+                    residual.axpy(1, v)
         else:
             F = self.lhs(self.z, self.z_) - self.problem.rhs(self.z_)
             post_function_callback = None
