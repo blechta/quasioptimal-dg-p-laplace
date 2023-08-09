@@ -62,6 +62,7 @@ class NonlinearEllipticSolver(object):
 
         # FIXME: This has to be overloaded for a mixed method
         self.bcs = problem.bcs(Z)  # This is overloaded in DGSolver
+        self.bcs = fd.solving._extract_bcs(self.bcs)
 
         #Obtain parameters from the constitutive relation and make sure they are Constants
         self.const_rel_params = {}
@@ -110,6 +111,8 @@ class NonlinearEllipticSolver(object):
             def post_function_callback(_, residual):
                 # FIXME: This is constant along Newton: We can cache this!
                 op.apply(self.problem.rhs, result=temp)
+                for bc in self.bcs:
+                    bc.zero(temp)
                 with temp.dat.vec_ro as v:
                     residual.axpy(-1, v)
         else:
@@ -224,7 +227,7 @@ class DGSolver(NonlinearEllipticSolver):
     def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel"):
         super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
         self.penalty_form = penalty_form
-        self.bcs = None
+        self.bcs = ()
         assert penalty_form in ["quadratic", "plaw", "const_rel"], "I don't know that form of the penalty..."
 
     def function_space(self, mesh, k):
