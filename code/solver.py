@@ -72,6 +72,10 @@ class NonlinearEllipticSolver(object):
                 setattr(self, param_str, fd.Constant(getattr(self, param_str)))
             self.const_rel_params[param_str] = getattr(self, param_str)
 
+        # Make sure "p" and "delta" are defined
+        if not("p" in list(self.problem.const_rel_params.keys())): self.p = fd.Constant(2.0)
+        if not("delta" in list(self.problem.const_rel_params.keys())): self.delta = fd.Constant(0.0)
+
 
     def solve(self, continuation_params):
         """ Rudimentary implementation of Newton + continuation
@@ -149,6 +153,18 @@ class NonlinearEllipticSolver(object):
             raise NotImplementedError
         return fields
 
+    def natural_F(self, w_1, w_2=None, conjugate=False):
+        if conjugate: # Computes the natural distance with p', delta^{p-1}
+            p_ = float(self.p/(self.p-1.))
+            delta_ = float(self.delta**(self.p - 1.))
+        else:
+            p_ = float(self.p)
+            delta_ = float(self.delta)
+
+        F_ = (delta_ + fd.inner(w_1, w_1)**(1/2.))**(0.5*(p_-2)) * w_1
+        if w_2 is not None: F_ -= (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*(p_-2)) * w_2
+        return (fd.assemble(fd.inner(F_, F_) * fd.dx))**0.5
+
     def W1pnorm(self, z, p):
         if self.formulation_u:
             return fd.assemble(fd.inner(fd.grad(z), fd.grad(z))**(p/2.) * fd.dx)**(1/p)
@@ -168,8 +184,8 @@ class NonlinearEllipticSolver(object):
                   "snes_rtol": 1e-6,
                   "snes_dtol": 1e10,
                   "snes_type": "newtonls",
-                  "snes_linesearch_type": "none",
-                  #"snes_linesearch_type": "nleqerr",
+                  #"snes_linesearch_type": "none",
+                  "snes_linesearch_type": "nleqerr",
                   "ksp_type": "preonly",
                   "pc_type": "lu",
                   "ksp_converged_reason": None,
@@ -319,6 +335,18 @@ class DGSolver(NonlinearEllipticSolver):
             jmp_penalty = K_ * U_jmp
         return jmp_penalty
 
+    def modular(self, z): #TODO: I think this should also be defined for CR...
+        alpha = 10. * self.k**2
+        n = fd.FacetNormal(self.Z.ufl_domain())
+        h = fd.CellDiameter(self.Z.ufl_domain())
+        U_jmp = 2. * fd.avg(fd.outer(z,n))
+        U_jmp_bdry = fd.outer(z, n)
+        jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
+        jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
+        jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
+        jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
+        power = 2.0 if (self.penalty_form == "quadratic") else float(self.p)
+        return (jumps)**(1./power)
 
     def W1pnorm(self, z, p):
 
