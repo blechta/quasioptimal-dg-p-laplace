@@ -105,19 +105,11 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
         coeffs1, coeffs2 = self.coeffs
         with result.dat.vec_wo as v:
             with f1.dat.vec_ro as v1:
-                # FIXME: This shouldn't be needed: INGORE_NEGATIVE_ENTRIES is
-                # considered in VecSetValues but in VecISAXPY negative entries
-                # are always ignored, regardless of the parameter value
-                #v1.setOption(PETSc.Vec.Option.IGNORE_NEGATIVE_INDICES, True)
                 for iset, alpha in coeffs1:
-                    isaxpy_or_axpy(v, iset, alpha, v1)
+                    vecisaxpy(v, iset, alpha, v1)
             with f2.dat.vec_ro as v2:
-                # FIXME: This shouldn't be needed: INGORE_NEGATIVE_ENTRIES is
-                # considered in VecSetValues but in VecISAXPY negative entries
-                # are always ignored, regardless of the parameter value
-                #v2.setOption(PETSc.Vec.Option.IGNORE_NEGATIVE_INDICES, True)
                 for iset, alpha in coeffs2:
-                    isaxpy_or_axpy(v, iset, alpha, v2)
+                    vecisaxpy(v, iset, alpha, v2)
 
         return result
 
@@ -297,15 +289,6 @@ class SmoothingOpVeeserZanottiDG(SmoothingOpVeeserZanotti):
         coeffs2 = [(FF1, -3/4), (FF2, -3/4),
                    (FF11, 3/8), (FF12, 3/8), (FF21, 3/8), (FF22, 3/8)]
         return coeffs1, coeffs2
-
-
-def isaxpy_or_axpy(vfull, iset, alpha, vreduced):
-    """Perform VecISAXPY or VecAXPY if iset is None"""
-    if iset is None:
-        # FIXME: Currently unused codepath: Remove
-        vfull.axpy(alpha, vreduced)
-    else:
-        vecisaxpy(vfull, iset, alpha, vreduced)
 
 
 def vecisaxpy(vfull, iset, alpha, vreduced):
