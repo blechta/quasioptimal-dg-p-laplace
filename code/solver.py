@@ -160,7 +160,7 @@ class NonlinearEllipticSolver(object):
 
     def get_parameters(self):
         #LU for now I guess...
-        params = {"snes_monnitor": None,
+        params = {"snes_monitor": None,
                   "snes_converged_reason": None,
                   "snes_max_it": 20,
                   "snes_atol": 1e-8,
@@ -174,10 +174,10 @@ class NonlinearEllipticSolver(object):
                   "ksp_converged_reason": None,
                   "ksp_monitor_true_residual": None,
                   "pc_factor_mat_solver_type": "mumps",
-                  "mat_mumps_icntl_14": 5000,
-                  "mat_mumps_icntl_24" : 1,
-                  "mat_mumps_cntl_1": 0.001,
-                  "mat_mumps_cntl_3": 0.0001,
+                  #"mat_mumps_icntl_14": 5000,
+                  #"mat_mumps_icntl_24" : 1,
+                  #"mat_mumps_cntl_1": 0.001,
+                  #"mat_mumps_cntl_3": 0.0001,
                   }
         return params
 
