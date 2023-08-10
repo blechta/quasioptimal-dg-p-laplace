@@ -109,17 +109,14 @@ class NonlinearEllipticSolver(object):
     def nonlinear_variational_solver(self):
 
         if self.smoothing:
-            # Precompute contribution from smoothed RHS
-            op = SmoothingOpVeeserZanotti(self.Z)
-            rhs = op.apply(self.problem.rhs)
-            for bc in self.bcs:
-                bc.zero(rhs)
-            rhs.dat *= -1
-
             F = self.lhs(self.z, self.z_)
+            op = SmoothingOpVeeserZanotti(self.Z)
             def post_function_callback(_, residual):
+                rhs = op.apply(self.problem.rhs)
+                for bc in self.bcs:
+                    bc.zero(rhs)
                 with rhs.dat.vec_ro as v:
-                    residual.axpy(1, v)
+                    residual.axpy(-1, v)
         else:
             F = self.lhs(self.z, self.z_) - self.problem.rhs(self.z_)
             post_function_callback = None
