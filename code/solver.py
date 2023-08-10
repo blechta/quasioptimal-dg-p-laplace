@@ -314,26 +314,6 @@ class DGSolver(CrouzeixRaviartSolver):
                 + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
                 + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
             )
-#=========================== TEST: do IP Laplace first =========================================================
-#            G = fd.grad(u)
-#            F = (fd.inner(G, fd.grad(v)) * fd.dx
-#                 - fd.inner(fd.avg(G), 2*fd.avg(fd.outer(v, n))) * fd.dS
-#                 - fd.inner(2*fd.avg(fd.outer(u, n)), fd.avg(fd.grad(v))) * fd.dS
-#                - fd.inner(G, fd.outer(v, n)) * fd.ds
-#                + (alpha/fd.avg(h)) * fd.inner(2*fd.avg(fd.outer(u, n)), 2*fd.avg(fd.outer(v, n))) * fd.dS
-#                + (alpha/h) * fd.inner(fd.outer(u,n), fd.outer(v,n)) * fd.ds
-#                 )
-            h_avg = (h('+') + h('-'))/2
-            alpha = 4.0  # hard-coded param
-            gamma = 8.0  # hard-coded param
-            F = fd.dot(fd.grad(v), fd.grad(u))*fd.dx \
-              - fd.dot(fd.avg(fd.grad(v)), fd.jump(u, n))*fd.dS \
-              - fd.dot(fd.jump(v, n), fd.avg(fd.grad(u)))*fd.dS \
-              + alpha/h_avg*fd.dot(fd.jump(v, n), fd.jump(u, n))*fd.dS \
-              - fd.dot(fd.grad(v), u*n)*fd.ds \
-              - fd.dot(v*n, fd.grad(u))*fd.ds \
-              + gamma/h*v*u*fd.ds
-#=========================== TEST =========================================================
         elif self.formulation_Su:
             F = (
                 -fd.inner(G, T) * fd.dx
