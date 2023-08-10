@@ -182,7 +182,7 @@ class NonlinearEllipticSolver(object):
             raise NotImplementedError
         return fields
 
-    def natural_F(self, w_1, w_2=None, conjugate=False):
+    def natural_F(self, w_1, w_2, conjugate=False):
         if conjugate: # Computes the natural distance with p', delta^{p-1}
             p_ = float(self.p/(self.p-1.))
             delta_ = float(self.delta**(self.p - 1.))
@@ -190,8 +190,9 @@ class NonlinearEllipticSolver(object):
             p_ = float(self.p)
             delta_ = float(self.delta)
 
-        F_ = (delta_ + fd.inner(w_1, w_1)**(1/2.))**(0.5*(p_-2)) * w_1
-        if w_2 is not None: F_ -= (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*(p_-2)) * w_2
+        F_1 = (delta_ + fd.inner(w_1, w_1)**(1/2.))**(0.5*p_-1) * w_1
+        F_2 = (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*p_- 1) * w_2
+        F_ = F_1 - F_2
         return (fd.assemble(fd.inner(F_, F_) * fd.dx))**0.5
 
     def W1pnorm(self, z, p):
@@ -383,7 +384,7 @@ class DGSolver(CrouzeixRaviartSolver):
                 + fd.inner(S, fd.grad(v)) * fd.dx
                 - fd.inner(fd.avg(S), 2*fd.avg(fd.outer(v, n))) * fd.dS
                 - fd.inner(S, fd.outer(v, n)) * fd.ds
-                + alpha * inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
+                + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
                 + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
             )
         else:
