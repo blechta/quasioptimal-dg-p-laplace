@@ -36,6 +36,9 @@ class NonlinearEllipticProblem_Su(NonlinearEllipticProblem):
         super().__init__(**const_rel_params)
         self.formulation = "S-u"
 
+    def bcs(self, Z):
+        #For now we only do homogeneous BCs
+        return fd.DirichletBC(Z.sub(1), fd.Constant(0.), "on_boundary")
 
 class NonlinearEllipticSolver(object):
 
@@ -230,7 +233,15 @@ class NonlinearEllipticSolver(object):
 class ConformingSolver(NonlinearEllipticSolver):
 
     def function_space(self, mesh, k):
-        return fd.FunctionSpace(mesh, "CG", k)
+        if self.formulation_u:
+            return fd.FunctionSpace(mesh, "CG", k)
+        elif self.formulation_Su:
+            eleu = fd.FiniteElement("CG", mesh.ufl_cell(), k)
+            eleS = fd.VectorElement("DG", mesh.ufl_cell(), k-1)
+            return fd.FunctionSpace(mesh, fd.MixedElement([eleS, eleu]))
+        else:
+            raise(NotImplementedError)
+
 
     def lhs(self, z, z_):
 
@@ -269,7 +280,14 @@ class CrouzeixRaviartSolver(ConformingSolver):
         assert penalty_form in ["quadratic", "p-d", "plaw", "const_rel"], "I don't know that form of the penalty..."
 
     def function_space(self, mesh, k):
-        return fd.FunctionSpace(mesh, "CR", k)
+        if self.formulation_u:
+            return fd.FunctionSpace(mesh, "CR", k)
+        elif self.formulation_Su:
+            eleu = fd.FiniteElement("CR", mesh.ufl_cell(), k)
+            eleS = fd.VectorElement("DG", mesh.ufl_cell(), k-1)
+            return fd.FunctionSpace(mesh, fd.MixedElement([eleS, eleu]))
+        else:
+            raise(NotImplementedError)
 
     def ip_penalty_jump(self, h_factor, vec, form="p-d"):
         """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
@@ -313,7 +331,14 @@ class DGSolver(CrouzeixRaviartSolver):
         self.bcs = ()
 
     def function_space(self, mesh, k):
-        return fd.FunctionSpace(mesh, "DG", k)
+        if self.formulation_u:
+            return fd.FunctionSpace(mesh, "DG", k)
+        elif self.formulation_Su:
+            eleu = fd.FiniteElement("DG", mesh.ufl_cell(), k)
+            eleS = fd.VectorElement("DG", mesh.ufl_cell(), k-1)
+            return fd.FunctionSpace(mesh, fd.MixedElement([eleS, eleu]))
+        else:
+            raise(NotImplementedError)
 
     def lhs(self, z, z_):
 
