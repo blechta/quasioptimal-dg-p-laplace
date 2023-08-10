@@ -24,7 +24,7 @@ class PowerLaw(NonlinearEllipticProblem):
         return fd.UnitSquareMesh(self.baseN, self.baseN, diagonal=self.diagonal)
 
     def const_rel(self, D):
-        return self.K * (delta + fd.inner(D, D)) ** ((float(self.p) - 2)/2.) * D
+        return self.K * (self.delta + fd.inner(D, D)) ** (0.5*self.p-1) * D
 
     def exact_solution(self, Z):
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
