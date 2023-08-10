@@ -86,18 +86,16 @@ if __name__ == "__main__":
         solver_.solve(continuation_params)
         u = solver_.z
 
-    #    u_exact = fd.interpolate(problem_.exact_solution(solver_.Z), fd.FunctionSpace(u.ufl_domain(), "CG", args.k + 3))
-    #    u_exact.rename("exact_solution")
         u_exact = problem_.exact_solution(solver_.Z)
 
         # Compute errors
         natural_distance = solver_.natural_F(w_1=fd.grad(u), w_2=fd.grad(u_exact))
         errors["F"].append(natural_distance)
         if args.disc == "CG":
+            errors["modular"].append(np.nan)
+        else:
             modular = solver_.modular(u)
             errors["modular"].append(modular)
-        else:
-            errors["modular"].append(np.nan)
         Lp_error = fd.assemble(fd.inner(u-u_exact, u-u_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
         errors["Lp"].append(Lp_error)
 

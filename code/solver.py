@@ -239,7 +239,37 @@ class CrouzeixRaviartSolver(ConformingSolver):
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "CR", k)
 
-class DGSolver(NonlinearEllipticSolver):
+    def ip_penalty_jump(self, h_factor, vec, form="const_rel"):
+        """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
+        assert form in ["const_rel", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
+        U_jmp = h_factor * vec
+        if form == "const_rel" and self.formulation_u:
+            jmp_penalty = self.problem.const_rel(U_jmp)
+        if form == "plaw":
+            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
+            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
+            jmp_penalty = K_ * fd.inner(U_jmp, U_jmp) ** ((p-2.)/2.) * U_jmp
+        elif form == "quadratic":
+            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
+            jmp_penalty = K_ * U_jmp
+        return jmp_penalty
+
+    def modular(self, z):
+        alpha = 10. * self.k**2
+        n = fd.FacetNormal(self.Z.ufl_domain())
+        h = fd.CellDiameter(self.Z.ufl_domain())
+        self.penalty_form = "const_rel"
+        U_jmp = 2. * fd.avg(fd.outer(z,n))
+        U_jmp_bdry = fd.outer(z, n)
+        jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
+        jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
+        jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
+        jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
+        power = 2.0 if (self.penalty_form == "quadratic") else float(self.p)
+        return (jumps)**(1./power)
+
+
+class DGSolver(CrouzeixRaviartSolver):
 
     def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel"):
         super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
@@ -319,34 +349,6 @@ class DGSolver(NonlinearEllipticSolver):
         else:
             raise NotImplementedError
         return F
-
-    def ip_penalty_jump(self, h_factor, vec, form="const_rel"):
-        """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
-        assert form in ["const_rel", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
-        U_jmp = h_factor * vec
-        if form == "const_rel" and self.formulation_u:
-            jmp_penalty = self.problem.const_rel(U_jmp)
-        if form == "plaw":
-            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
-            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
-            jmp_penalty = K_ * fd.inner(U_jmp, U_jmp) ** ((p-2.)/2.) * U_jmp
-        elif form == "quadratic":
-            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
-            jmp_penalty = K_ * U_jmp
-        return jmp_penalty
-
-    def modular(self, z): #TODO: I think this should also be defined for CR...
-        alpha = 10. * self.k**2
-        n = fd.FacetNormal(self.Z.ufl_domain())
-        h = fd.CellDiameter(self.Z.ufl_domain())
-        U_jmp = 2. * fd.avg(fd.outer(z,n))
-        U_jmp_bdry = fd.outer(z, n)
-        jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
-        jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
-        jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
-        jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
-        power = 2.0 if (self.penalty_form == "quadratic") else float(self.p)
-        return (jumps)**(1./power)
 
     def W1pnorm(self, z, p):
 
