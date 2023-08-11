@@ -4,6 +4,7 @@ import numpy as np
 import argparse
 import pprint
 import sys
+import os
 sys.path.append('..')
 
 from solver import NonlinearEllipticProblem, ConformingSolver, CrouzeixRaviartSolver, DGSolver
@@ -13,22 +14,20 @@ def compute_rates(errors, res):
                                  for i in range(len(res)-1)]
 
 class PowerLaw(NonlinearEllipticProblem):
-    def __init__(self, baseN, p, delta, K, diagonal=None):
+    def __init__(self, p, delta, K, alpha=1.01):
         super().__init__(p=p, delta=delta, K=K)
-        if diagonal is None:
-            diagonal = "left"
-        self.diagonal = diagonal
-        self.baseN = baseN
+        self.alpha = alpha
 
     def mesh(self):
-        return fd.UnitSquareMesh(self.baseN, self.baseN, diagonal=self.diagonal)
+        return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square.msh")
 
     def const_rel(self, D):
         return self.K * (self.delta + fd.inner(D, D)) ** (0.5*self.p-1) * D
 
     def exact_solution(self, Z):
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
-        return fd.sin(4*fd.pi*x) * y**2 * (1.-y)**2
+        cutoff = (1 - x*x)*(1 - y*y)
+        return cutoff * (x*x + y*y) ** (0.5*self.alpha)
 
     def rhs(self, v):
         sols = self.exact_solution(v.function_space())
@@ -39,7 +38,7 @@ class PowerLaw(NonlinearEllipticProblem):
 
     def interpolate_initial_guess(self, z):
         x, y = fd.SpatialCoordinate(z.ufl_domain())
-        z.interpolate(x**2 * (1-x)**2 * y**2 * (1-y)**2)
+        z.interpolate((x+1)**2 * (1-x)**2 * (y+1)**2 * (1-y)**2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -47,18 +46,16 @@ if __name__ == "__main__":
     parser.add_argument("--disc", choices=["CR","CG","DG"], default="CG")
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
-    parser.add_argument("--baseN", type=int, default=16)
-    parser.add_argument("--diagonal", type=str, default="left",
-                        choices=["left", "right", "crossed"])
+    parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
     parser.add_argument("--k", type=int, default=1)
     args, _ = parser.parse_known_args()
 
     # Initialize values for the constitutive relation
     p = fd.Constant(2.0)
     K = fd.Constant(1.0)
-    delta = fd.Constant(0.001)
+    delta = fd.Constant(0.0001)
 
-    problem_ = PowerLaw(args.baseN, p=p, delta=delta, K=K, diagonal=args.diagonal)
+    problem_ = PowerLaw(p=p, delta=delta, K=K, alpha=args.alpha)
     solver_class = {"CG": ConformingSolver,
                     "CR": CrouzeixRaviartSolver,
                     "DG": DGSolver}[args.disc]
@@ -67,11 +64,11 @@ if __name__ == "__main__":
     delta_s = [0.001]
     K_s = [1.0]
     p_s = [2.0, 2.5, 3.0]
-    p_s = [2.0, 1.8, 1.7]
+    p_s = [2.0, 1.8]#, 1.7]
 #    p_s = [2.0]
     continuation_params = {"p": p_s, "K": K_s}
 
-    # Choose resolutions TODO: Unstructured mesh?
+    # Choose resolutions TODO: Should we compute the mesh size from the mesh?
     res = [2**i for i in range(2,args.nrefs+2)]
     h_s = [1./re for re in res]
 
