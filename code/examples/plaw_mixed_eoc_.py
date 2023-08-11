@@ -17,7 +17,7 @@ def compute_error(z, S_ex, u_ex, p_): # TODO: Why do we get in trouble without t
     F_u = (1e-12 + fd.inner(fd.grad(u), fd.grad(u)))**(0.25*p_ - 0.5) * fd.grad(u)
     F_u -= (1e-12 + fd.inner(fd.grad(u_ex), fd.grad(u_ex)))**(0.25*p_ - 0.5) * fd.grad(u_ex)
     F_S = (1e-12 + fd.inner(S, S))**(0.25*(p_/(p_-1)) - 0.5) * S
-    F_S -= (1e-12 + fd.inner(S_ex, S_ex))**(0.25*(p_/(p_-1)) - 0.5) * S_ex
+#    F_S -= (1e-12 + fd.inner(S_ex, S_ex))**(0.25*(p_/(p_-1)) - 0.5) * S_ex   # This crashes if I add the float in const_rel....
     natural_d_u = fd.assemble(fd.inner(F_u, F_u) * fd.dx)**0.5
     natural_d_S = fd.assemble(fd.inner(F_S, F_S) * fd.dx)**0.5
     return natural_d_S, natural_d_u
@@ -35,7 +35,8 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         return fd.UnitSquareMesh(self.baseN, self.baseN, diagonal=self.diagonal)
 
     def const_rel(self, S):
-        return fd.inner(S,S) ** (0.5*(self.p/(self.p-1)) - 1) * S
+#        return fd.inner(S,S) ** (0.5*(self.p/(self.p-1)) - 1) * S    # In principle we should be able to use this one
+        return fd.inner(S,S) ** (0.5*(float(self.p)/(float(self.p)-1)) - 1) * S     # Sometimes DG crashes if the "float" is not there, but then computing the errors breaks...
 
     def const_rel_inverse(self, D): # We just use this for the exact solution so we need to use the final value of "p"
         return fd.inner(D, D) ** (0.5*self.p_final - 1) * D
@@ -77,8 +78,8 @@ if __name__ == "__main__":
 
     # Choose over which constitutive parameters we do continuation
     p_s = [2.0, 2.5, 3.0]
-#    p_s = [2.0, 1.8]#, 1.7]
-#    p_s = [2.0]
+    p_s = [2.0, 1.8]#, 1.7]
+    p_s = [2.0]
     continuation_params = {"p": p_s}
 
     problem_ = PowerLaw(args.baseN, p=p, p_final=p_s[-1], diagonal=args.diagonal)
