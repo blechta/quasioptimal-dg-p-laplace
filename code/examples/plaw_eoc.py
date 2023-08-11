@@ -45,6 +45,7 @@ if __name__ == "__main__":
         description=""" Just to check things don't break; convergence rate later""")
     parser.add_argument("--disc", choices=["CR","CG","DG"], default="CG")
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
+    parser.add_argument("--no-shift", dest="no_shift", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
     parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
     parser.add_argument("--k", type=int, default=1)
@@ -63,8 +64,8 @@ if __name__ == "__main__":
     # Choose over which constitutive parameters we do continuation
     delta_s = [0.001]
     K_s = [1.0]
-    p_s = [2.0, 2.5, 3.0]
-    p_s = [2.0, 1.8]#, 1.7]
+    p_s = [2.0, 2.5]#, 3.0]
+#    p_s = [2.0, 1.8]#, 1.7]
 #    p_s = [2.0]
     continuation_params = {"p": p_s, "K": K_s}
 
@@ -76,7 +77,9 @@ if __name__ == "__main__":
     errors = {"F": [], "modular": [], "Lp": []}
 
     for nref in range(1, len(res)+1):
-        solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing)
+        solver_kwargs = {"nref": nref, "smoothing": args.smoothing}
+        if args.disc in ["CR", "DG"]: solver_kwargs["no_shift"] = args.no_shift
+        solver_ = solver_class(problem_, **solver_kwargs)
 
         problem_.interpolate_initial_guess(solver_.z)
 

@@ -1,5 +1,7 @@
 import firedrake as fd
 
+import numpy as np
+
 from smoothing import SmoothingOpVeeserZanotti
 
 
@@ -129,7 +131,6 @@ class NonlinearEllipticSolver(object):
 
 
     def get_jacobian(self):
-        # Later we will need something other than Newton
         J0 = fd.derivative(self.lhs(self.z, self.z_), self.z)
         return J0
 
@@ -233,14 +234,24 @@ class ConformingSolver(NonlinearEllipticSolver):
 
 class CrouzeixRaviartSolver(ConformingSolver):
 
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel", no_shift=True):
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
+        self.penalty_form = penalty_form
+        self.no_shift = no_shift
+        assert penalty_form in ["quadratic", "p-d", "plaw", "const_rel"], "I don't know that form of the penalty..."
+
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "CR", k)
 
     def ip_penalty_jump(self, h_factor, vec, form="const_rel"):
         """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
-        assert form in ["const_rel", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
+        assert form in ["const_rel", "p-d", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
         U_jmp = h_factor * vec
-        if form == "const_rel" and self.formulation_u:
+        if self.formulation_Su or (form == "p-d"):
+            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
+            delta = self.problem.const_rel_params.get("delta", 0.0001) # Get delta
+            jmp_penalty = (delta + fd.inner(U_jmp, U_jmp)) ** (0.5*p- 1) * U_jmp
+        elif form == "const_rel":
             jmp_penalty = self.problem.const_rel(U_jmp)
         if form == "plaw":
             p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
@@ -249,6 +260,7 @@ class CrouzeixRaviartSolver(ConformingSolver):
         elif form == "quadratic":
             K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
             jmp_penalty = K_ * U_jmp
+
         return jmp_penalty
 
     def modular(self, z):
@@ -268,11 +280,9 @@ class CrouzeixRaviartSolver(ConformingSolver):
 
 class DGSolver(CrouzeixRaviartSolver):
 
-    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel"):
-        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
-        self.penalty_form = penalty_form
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel", no_shift=True):
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing, penalty_form=penalty_form, no_shift=no_shift)
         self.bcs = ()
-        assert penalty_form in ["quadratic", "plaw", "const_rel"], "I don't know that form of the penalty..."
 
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "DG", k)
@@ -326,6 +336,75 @@ class DGSolver(CrouzeixRaviartSolver):
         else:
             raise NotImplementedError
         return F
+
+    def get_jacobian(self):
+        if self.no_shift:# or (float(self.p) <= 2.0):
+            J0 = fd.derivative(self.lhs(self.z, self.z_), self.z)
+        else:
+            # Define functions and test functions
+            z_ = fd.TestFunction(self.Z)
+            fields = self.split_variables(self.z, z_)
+            u = fields["u"]
+            v = fields["v"]
+            S = fields.get("S")
+            T = fields.get("T")
+            # Also a trial function
+            w = fd.TrialFunction(self.Z)
+#            fields_ = self.split_variables(w, z_)
+#            u0 = fields_["u"]
+
+            # Compute the max shift
+            z_current = self.z.copy(deepcopy=True)
+            if self.formulation_u:
+                u_current = z_current
+            elif self.formulation_Su:
+                _, u_current = z_current.subfunctions
+            else:
+                raise(NotImplementedError)
+            gradu_current_squared = fd.project(fd.inner(fd.grad(u_current), fd.grad(u_current)), fd.FunctionSpace(self.z.ufl_domain(), "DG", 2*(self.k-1)))
+            max_shift = np.max(np.sqrt(np.absolute(gradu_current_squared.vector().get_local())))
+
+            # For the DG terms
+            alpha = 10. * self.k**2
+            n = fd.FacetNormal(self.Z.ufl_domain())
+            h = fd.CellDiameter(self.Z.ufl_domain())
+            U_jmp = (2./fd.avg(h)) * fd.avg(fd.outer(u,n))
+            U_jmp_bdry = (1./h) * fd.outer(u, n)
+            delta = self.problem.const_rel_params.get("delta", 0.0001) # Get delta
+            jmp_penalty = (delta + max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*self.p- 1) * U_jmp # We include the shift here!
+            jmp_penalty_bdry = (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 1) * U_jmp # We include the shift here!
+
+            if self.formulation_u:
+                G = self.problem.const_rel(fd.grad(u))
+            elif self.formulation_Su:
+                G = self.problem.const_rel(S)
+            else:
+                raise NotImplementedError
+
+            if self.formulation_u:
+                F = (
+                    fd.inner(G, fd.grad(v)) * fd.dx # TODO: Need a different formulation for LDG
+                    - fd.inner(fd.avg(G), 2*fd.avg(fd.outer(v, n))) * fd.dS
+                    - fd.inner(G, fd.outer(v, n)) * fd.ds
+                    + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
+                    + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
+                )
+            elif self.formulation_Su:
+                F = (
+                    -fd.inner(G, T) * fd.dx
+                    + fd.inner(fd.grad(u), T) * fd.dx
+                    - fd.inner(fd.avg(T), 2*fd.avg(fd.outer(u, n))) * fd.dS # Remove this one for IIDG
+                    - fd.inner(T, fd.outer(u, n)) * fd.ds # Remove this one for IIDG
+                    + fd.inner(S, fd.grad(v)) * fd.dx
+                    - fd.inner(fd.avg(S), 2*fd.avg(fd.outer(v, n))) * fd.dS
+                    - fd.inner(S, fd.outer(v, n)) * fd.ds
+                    + alpha * inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
+                    + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
+                )
+
+            J0 = fd.derivative(F, self.z, w)
+
+            return J0
 
     def W1pnorm(self, z, p):
 
