@@ -12,40 +12,39 @@ def compute_rates(errors, res):
     return [np.log(errors[i]/errors[i+1])/np.log(res[i+1]/res[i])
                                  for i in range(len(res)-1)]
 
-#def natural_F(w_1, w_2, p_, delta_, conjugate=False):
-#    if conjugate: # Computes the natural distance with p', delta^{p-1}
-#        delta_ = delta_**(p_ - 1.)
-#        p_ = p_/(p_-1.)
-#
-#    F_ = (delta_ + fd.inner(w_1, w_1)**(1/2.))**(0.5*float(p_)- 1) * w_1
-#    F_ -= (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*float(p_)- 1) * w_2 # I don't know why this line breaks things...
-#    return (fd.assemble(fd.inner(F_, F_) * fd.dx))**0.5
-#
+def compute_error(z, S_ex, u_ex, p_): # TODO: Why do we get in trouble without that regularisation?
+    S, u = z.subfunctions
+    F_u = (1e-12 + fd.inner(fd.grad(u), fd.grad(u)))**(0.25*p_ - 0.5) * fd.grad(u)
+    F_u -= (1e-12 + fd.inner(fd.grad(u_ex), fd.grad(u_ex)))**(0.25*p_ - 0.5) * fd.grad(u_ex)
+    F_S = (1e-12 + fd.inner(S, S))**(0.25*(p_/(p_-1)) - 0.5) * S
+    F_S -= (1e-12 + fd.inner(S_ex, S_ex))**(0.25*(p_/(p_-1)) - 0.5) * S_ex
+    natural_d_u = fd.assemble(fd.inner(F_u, F_u) * fd.dx)**0.5
+    natural_d_S = fd.assemble(fd.inner(F_S, F_S) * fd.dx)**0.5
+    return natural_d_S, natural_d_u
 
 class PowerLaw(NonlinearEllipticProblem_Su):
-    def __init__(self, baseN, p, delta, K, diagonal=None):
-        super().__init__(p=p, delta=delta, K=K)
+    def __init__(self, baseN, p, p_final, diagonal=None):
+        super().__init__(p=p)
         if diagonal is None:
             diagonal = "left"
         self.diagonal = diagonal
         self.baseN = baseN
+        self.p_final = p_final
 
     def mesh(self):
         return fd.UnitSquareMesh(self.baseN, self.baseN, diagonal=self.diagonal)
 
     def const_rel(self, S):
-        p_prime = self.p/(self.p-1.)
-        delta_prime = self.delta**(self.p -1)
-        return self.K * (delta_prime + fd.inner(S, S)) ** (0.5*float(p_prime) - 1) * S # Without the "float" here sometimes things crash even for p=2...
+        return fd.inner(S,S) ** (0.5*(self.p/(self.p-1)) - 1) * S
 
-    def const_rel_inverse(self, D):
-        return self.K * (self.delta + fd.inner(D, D)) ** (0.5*self.p - 1) * D
+    def const_rel_inverse(self, D): # We just use this for the exact solution so we need to use the final value of "p"
+        return fd.inner(D, D) ** (0.5*self.p_final - 1) * D
 
     def exact_potential(self, Z):
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
         return fd.sin(4*fd.pi*x) * y**2 * (1.-y)**2
 
-    def exact_flux(self, Z): # TODO: This only works if delta = 0, because we know the inverse constitutive relation... what to do in general?
+    def exact_flux(self, Z):
         D = fd.grad(self.exact_potential(Z))
         return self.const_rel_inverse(D)
 
@@ -56,7 +55,7 @@ class PowerLaw(NonlinearEllipticProblem_Su):
 #        L = fd.inner(S, fd.grad(v)) * fd.dx # Should this work for DG? I think not
         return L
 
-    def interpolate_initial_guess(self, z):
+    def interpolate_initial_guess(self, z): # Just choose something non-zero...
         x, y = fd.SpatialCoordinate(z.ufl_domain())
         z.sub(0).interpolate(fd.as_vector([x-1, y+1]))
         z.sub(1).interpolate(x**2 * (1-x)**2 * y**2 * (1-y)**2)
@@ -75,21 +74,18 @@ if __name__ == "__main__":
 
     # Initialize values for the constitutive relation
     p = fd.Constant(2.0)
-    K = fd.Constant(1.0)
-    delta = fd.Constant(0.0)
 
-    problem_ = PowerLaw(args.baseN, p=p, delta=delta, K=K, diagonal=args.diagonal)
+    # Choose over which constitutive parameters we do continuation
+    p_s = [2.0, 2.5, 3.0]
+#    p_s = [2.0, 1.8]#, 1.7]
+#    p_s = [2.0]
+    continuation_params = {"p": p_s}
+
+    problem_ = PowerLaw(args.baseN, p=p, p_final=p_s[-1], diagonal=args.diagonal)
     solver_class = {"CG": ConformingSolver,
                     "CR": CrouzeixRaviartSolver,
                     "DG": DGSolver}[args.disc]
 
-    # Choose over which constitutive parameters we do continuation
-    delta_s = [0.0]
-    K_s = [1.0]
-    p_s = [2.0, 2.5, 3.0]
-    p_s = [2.0, 1.8]#, 1.7]
-    p_s = [2.0]
-    continuation_params = {"p": p_s, "K": K_s}
 
     # Choose resolutions TODO: Unstructured mesh?
     res = [2**i for i in range(2,args.nrefs+2)]
@@ -104,19 +100,20 @@ if __name__ == "__main__":
         problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
-#        S, u = solver_.z.subfunctions # Which is the correct one?
-        S, u = fd.split(solver_.z)
+        S, u = solver_.z.subfunctions # Which is the correct one?
+#        S, u = fd.split(solver_.z)
 
         u_exact = problem_.exact_potential(solver_.Z)
         S_exact = problem_.exact_flux(solver_.Z)
 
+        a = fd.assemble(fd.dot(S-S_exact, S-S_exact)*fd.dx)
+
         # Compute errors
         # Compute explicitly the p=2 case for testing
-        natural_distance_S = fd.assemble(fd.inner(S-S_exact, S-S_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
-        natural_distance_u = fd.assemble(fd.inner(fd.grad(u-u_exact), fd.grad(u-u_exact))**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
-        # But these are the ones we want and don't work for some reason...
-#        natural_distance_u = solver_.natural_F(w_1=fd.grad(u), w_2=fd.grad(u_exact)) # This one is correct for p=2 (but e.g. produces "nan" for CG)
-#        natural_distance_S = solver_.natural_F(w_1=S, w_2=S_exact, conjugate=True)  # This one sometimes just crashes... seems incorrect for p != 2
+#        natural_distance_S = fd.assemble(fd.inner(S-S_exact, S-S_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
+#        natural_distance_u = fd.assemble(fd.inner(fd.grad(u-u_exact), fd.grad(u-u_exact))**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
+        # Let's try 
+        natural_distance_S, natural_distance_u = compute_error(solver_.z, S_exact, u_exact, p_s[-1])
         errors["F_potential"].append(natural_distance_u)
         errors["F*_flux"].append(natural_distance_S)
         if args.disc == "CG":
@@ -139,3 +136,7 @@ if __name__ == "__main__":
     pprint.pprint(errors)
     print("Computed rates: ")
     pprint.pprint(convergence_rates)
+
+    # Testing...
+#    u.rename("Velocity")
+#    fd.File("test.pvd").write(u, fd.Function(solver_.Z.sub(1)).interpolate(u_exact))

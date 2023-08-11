@@ -100,6 +100,7 @@ class NonlinearEllipticSolver(object):
         for param_str in continuation_params.keys():
             for param in continuation_params[param_str][counter:]:
                 getattr(self, param_str).assign(param)
+                getattr(self.problem, param_str).assign(param)
 
                 output_info = "Solving for "
                 for param_ in continuation_params.keys():
@@ -257,6 +258,7 @@ class ConformingSolver(NonlinearEllipticSolver):
             G = self.problem.const_rel(fd.grad(u))
         elif self.formulation_Su:
             G = self.problem.const_rel(S)
+#            G = fd.inner(S,S)**(0.5*(self.p/(self.p-1)) -1) * S
         else:
             raise NotImplementedError
 
