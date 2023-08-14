@@ -177,7 +177,8 @@ class NonlinearEllipticSolver(object):
         #LU for now I guess...
         params = {"snes_monitor": None,
                   "snes_converged_reason": None,
-                  "snes_max_it": 20,
+                  #"snes_max_it": 20,
+                  "snes_max_it": 100,
                   "snes_atol": 1e-8,
                   "snes_rtol": 1e-6,
                   "snes_dtol": 1e10,
@@ -350,8 +351,11 @@ class DGSolver(CrouzeixRaviartSolver):
             T = fields.get("T")
             # Also a trial function
             w = fd.TrialFunction(self.Z)
-#            fields_ = self.split_variables(w, z_)
-#            u0 = fields_["u"]
+            # ==================== TEST =======================
+            fields_ = self.split_variables(w, z_)
+            u0 = fields_["u"]
+            D0 = fd.grad(u0)
+            # ==================== TEST =======================
 
             # Compute the max shift
             z_current = self.z.copy(deepcopy=True)
@@ -372,7 +376,7 @@ class DGSolver(CrouzeixRaviartSolver):
             U_jmp_bdry = (1./h) * fd.outer(u, n)
             delta = self.problem.const_rel_params.get("delta", 0.0001) # Get delta
             jmp_penalty = (delta + max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*self.p- 1) * U_jmp # We include the shift here!
-            jmp_penalty_bdry = (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 1) * U_jmp # We include the shift here!
+            jmp_penalty_bdry = (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 1) * U_jmp_bdry # We include the shift here!
 
             if self.formulation_u:
                 G = self.problem.const_rel(fd.grad(u))
@@ -389,6 +393,26 @@ class DGSolver(CrouzeixRaviartSolver):
                     + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
                     + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
                 )
+                # ======================== TEST (write the Newton jacobian explicitly) ======================00
+#                max_shift = 0.
+                D = fd.grad(u)
+                U_jmp0 = (2./fd.avg(h)) * fd.avg(fd.outer(u0,n))
+                U_jmp_bdry0 = (1./h) * fd.outer(u0, n)
+                jmp_penalty0 = (delta + max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*self.p- 1) * U_jmp0 # We include the shift here!
+                jmp_penalty0 += (self.p - 2) * (delta + max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*self.p- 2) * fd.dot(U_jmp0,U_jmp) * U_jmp # We include the shift here!
+                jmp_penalty_bdry0 = (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 1) * U_jmp_bdry0 # We include the shift here!
+                jmp_penalty_bdry0 += (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 2) * fd.dot(U_jmp_bdry0, U_jmp_bdry) * U_jmp_bdry # We include the shift here!
+                J0 = (
+                    fd.inner((self.delta + fd.inner(D,D))**(0.5*self.p - 1) * D0, fd.grad(v)) * fd.dx
+                    + (self.p - 2) * (self.delta + fd.inner(D,D))**(0.5*self.p - 2) * fd.dot(D0, fd.grad(u)) * fd.dot(fd.grad(v), fd.grad(u)) * fd.dx
+                    - fd.inner(fd.avg((self.delta + fd.inner(D,D))**(0.5*self.p - 1) * D0), 2*fd.avg(fd.outer(v, n))) * fd.dS
+                    - (self.p - 2) * fd.inner(fd.avg((self.delta + fd.inner(D,D))**(0.5*self.p - 2) * fd.dot(D0, fd.grad(u))*fd.grad(u)), 2*fd.avg(fd.outer(v, n))) * fd.dS
+                    - fd.inner((self.delta + fd.inner(D,D))**(0.5*self.p - 1) * D0, fd.outer(v, n)) * fd.ds
+                    - (self.p - 2) * fd.inner((self.delta + fd.inner(D,D))**(0.5*self.p - 2) * fd.dot(D0, fd.grad(u))*fd.grad(u), fd.outer(v, n)) * fd.ds
+                    + alpha * fd.inner(jmp_penalty0, 2*fd.avg(fd.outer(v, n))) * fd.dS
+                    + alpha * fd.inner(jmp_penalty_bdry0, fd.outer(v,n)) * fd.ds
+                )
+                # ======================== TEST (write the Newton jacobian explicitly) ======================00
             elif self.formulation_Su:
                 F = (
                     -fd.inner(G, T) * fd.dx
@@ -402,7 +426,7 @@ class DGSolver(CrouzeixRaviartSolver):
                     + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
                 )
 
-            J0 = fd.derivative(F, self.z, w)
+#            J0 = fd.derivative(F, self.z, w)
 
             return J0
 

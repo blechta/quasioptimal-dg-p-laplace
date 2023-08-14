@@ -65,7 +65,7 @@ if __name__ == "__main__":
     delta_s = [0.001]
     K_s = [1.0]
     p_s = [2.0, 2.5]#, 3.0]
-#    p_s = [2.0, 1.8]#, 1.7]
+    p_s = [2.0, 1.8]#, 1.7]
 #    p_s = [2.0]
     continuation_params = {"p": p_s, "K": K_s}
 
@@ -81,7 +81,8 @@ if __name__ == "__main__":
         if args.disc in ["CR", "DG"]: solver_kwargs["no_shift"] = args.no_shift
         solver_ = solver_class(problem_, **solver_kwargs)
 
-        problem_.interpolate_initial_guess(solver_.z)
+        if (np.abs(delta_s[-1]) < 1e-10):
+            problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
         u = solver_.z
