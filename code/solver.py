@@ -233,6 +233,11 @@ class ConformingSolver(NonlinearEllipticSolver):
 
 class CrouzeixRaviartSolver(ConformingSolver):
 
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel"):
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
+        self.penalty_form = penalty_form
+        assert penalty_form in ["quadratic", "plaw", "const_rel"], "I don't know that form of the penalty..."
+
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "CR", k)
 
@@ -255,7 +260,6 @@ class CrouzeixRaviartSolver(ConformingSolver):
         alpha = 10. * self.k**2
         n = fd.FacetNormal(self.Z.ufl_domain())
         h = fd.CellDiameter(self.Z.ufl_domain())
-        self.penalty_form = "const_rel"
         U_jmp = 2. * fd.avg(fd.outer(z,n))
         U_jmp_bdry = fd.outer(z, n)
         jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
@@ -269,10 +273,8 @@ class CrouzeixRaviartSolver(ConformingSolver):
 class DGSolver(CrouzeixRaviartSolver):
 
     def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel"):
-        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
-        self.penalty_form = penalty_form
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing, penalty_form=penalty_form)
         self.bcs = ()
-        assert penalty_form in ["quadratic", "plaw", "const_rel"], "I don't know that form of the penalty..."
 
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "DG", k)

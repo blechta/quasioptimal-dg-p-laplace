@@ -47,6 +47,7 @@ if __name__ == "__main__":
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
     parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
+    parser.add_argument("--penalty", choices=["const_rel","plaw","quadratic"], default="const_rel")
     parser.add_argument("--k", type=int, default=1)
     args, _ = parser.parse_known_args()
 
@@ -59,6 +60,8 @@ if __name__ == "__main__":
     solver_class = {"CG": ConformingSolver,
                     "CR": CrouzeixRaviartSolver,
                     "DG": DGSolver}[args.disc]
+    solver_args = {"nref": args.nrefs, "smoothing": args.smoothing}
+    if args.disc in ["CR","DG"]: solver_args["penalty_form"] = args.penalty
 
     # Choose over which constitutive parameters we do continuation
     delta_s = [0.001]
@@ -76,7 +79,8 @@ if __name__ == "__main__":
     errors = {"F": [], "modular": [], "Lp": []}
 
     for nref in range(1, len(res)+1):
-        solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing)
+        solver_args["nref"] = nref
+        solver_ = solver_class(problem_, **solver_args)
 
         problem_.interpolate_initial_guess(solver_.z)
 
