@@ -268,7 +268,6 @@ class CrouzeixRaviartSolver(ConformingSolver):
         alpha = 10. * self.k**2
         n = fd.FacetNormal(self.Z.ufl_domain())
         h = fd.CellDiameter(self.Z.ufl_domain())
-        self.penalty_form = "const_rel"
         U_jmp = 2. * fd.avg(fd.outer(z,n))
         U_jmp_bdry = fd.outer(z, n)
         jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
