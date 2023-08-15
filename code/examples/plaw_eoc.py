@@ -48,6 +48,8 @@ if __name__ == "__main__":
     parser.add_argument("--nrefs", type=int, default=6)
     parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
     parser.add_argument("--penalty", choices=["const_rel","plaw","quadratic"], default="const_rel")
+    parser.add_argument("--cr", default="thinning", choices=["newtonian","thinning","thickening"]) # Controls if p is larger or smaller than 2
+    parser.add_argument("--p-s", type=int, default=1) # Larger = further away from Newtonian (0 = Newtonian)
     parser.add_argument("--k", type=int, default=1)
     args, _ = parser.parse_known_args()
 
@@ -64,16 +66,25 @@ if __name__ == "__main__":
     if args.disc in ["CR","DG"]: solver_args["penalty_form"] = args.penalty
 
     # Choose over which constitutive parameters we do continuation
+    # First all the possibilities for p:
+    if args.cr == "thinning":
+        possible_p_s = [2.0, 1.9, 1.8, 1.7, 1.6, 1.5]
+    elif args.cr == "thickening":
+        possible_p_s = [2.0, 2.5, 3.0, 3.5, 4.0, 5.0]
+    else:
+        possible_p_s = [2.0]
+    assert (args.p_s <= len(possible_p_s)), "p-s is too large... choose something smaller"
     delta_s = [0.001]
     K_s = [1.0]
-    p_s = [2.0, 2.5, 3.0]
-    p_s = [2.0, 1.8]#, 1.7]
-#    p_s = [2.0]
+    if args.cr == "newtonian":
+        p_s = [2.0]
+    else:
+        p_s = possible_p_s[:(args.p_s+1)]
     continuation_params = {"p": p_s, "K": K_s}
 
-    # Choose resolutions TODO: Should we compute the mesh size from the mesh?
+    # Choose resolutions
     res = [2**i for i in range(2,args.nrefs+2)]
-    h_s = [1./re for re in res]
+    h_s = []#[1./re for re in res]
 
     # To store the errors
     errors = {"F": [], "modular": [], "Lp": []}
@@ -82,12 +93,17 @@ if __name__ == "__main__":
         solver_args["nref"] = nref
         solver_ = solver_class(problem_, **solver_args)
 
-        problem_.interpolate_initial_guess(solver_.z)
+        if (np.abs(float(delta)) < 1e-10): problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
         u = solver_.z
 
         u_exact = problem_.exact_solution(solver_.Z)
+
+        # Compute current mesh size
+        h = fd.Function(fd.FunctionSpace(solver_.z.ufl_domain(), "DG", 0)).interpolate(fd.CellSize(solver_.z.ufl_domain()))
+        with h.dat.vec_ro as w:
+            h_s.append((w.max()[1], w.sum()/w.getSize()))
 
         # Compute errors
         natural_distance = solver_.natural_F(w_1=fd.grad(u), w_2=fd.grad(u_exact))
@@ -104,6 +120,7 @@ if __name__ == "__main__":
     convergence_rates = {err_type: compute_rates(errors[err_type], res)
                          for err_type in ["F", "modular", "Lp"]}
 
+    print("Mesh sizes (h_max, h_avg): ", h_s)
     print("Computed errors: ")
     pprint.pprint(errors)
     print("Computed rates: ")
