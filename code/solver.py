@@ -125,12 +125,21 @@ class NonlinearEllipticSolver(object):
 
         if self.smoothing:
             F = self.lhs(self.z, self.z_)
-            op = SmoothingOpVeeserZanotti(self.Z)
+            if self.formulation_u:
+                op = SmoothingOpVeeserZanotti(self.Z)
+                rhs = self.problem.rhs
+                b = fd.Function(self.Z)
+                b1 = b
+            elif self.formulation_Su:
+                op = SmoothingOpVeeserZanotti(self.Z[1])
+                rhs = _split_rhs(self.problem.rhs)
+                b = fd.Function(self.Z)
+                b1 = b.sub(1)
             def post_function_callback(_, residual):
-                rhs = op.apply(self.problem.rhs)
+                op.apply(rhs, result=b1)
                 for bc in self.bcs:
-                    bc.zero(rhs)
-                with rhs.dat.vec_ro as v:
+                    bc.zero(b)
+                with b.dat.vec_ro as v:
                     residual.axpy(-1, v)
         else:
             F = self.lhs(self.z, self.z_) - self.problem.rhs(self.z_)
@@ -420,3 +429,16 @@ class DGSolver(CrouzeixRaviartSolver):
             jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(z)) *fd.dS)
             jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, z) * fd.ds)
             return S_norm + (broken_W1p + jumps)**(1/p)
+
+
+def _split_rhs(rhs):
+    def wrapper(test_function):
+        space = test_function.function_space()
+        mixed_space = space * space
+        test_function = fd.TestFunction(mixed_space)
+        form = rhs(test_function)
+        f0, f1 = fd.formmanipulation.split_form(form)
+        # NB: Assuming f0 is zero, not sure how to check...
+        _, f1 = f1
+        return f1
+    return wrapper

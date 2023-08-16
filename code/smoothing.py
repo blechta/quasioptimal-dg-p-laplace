@@ -69,7 +69,7 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
         elif V.ufl_element().family() == 'Discontinuous Lagrange':
             return SmoothingOpVeeserZanottiDG(V)
         else:
-            return object.__new__(cls)
+            raise NotImplementedError(f'Smoothing not implemented for space {V}')
 
     def __init__(self, V):
         assert V.ufl_element().degree() == 1
