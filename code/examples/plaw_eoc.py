@@ -70,10 +70,12 @@ if __name__ == "__main__":
     # First all the possibilities for p:
     if args.cr == "thinning":
         possible_p_s = [2.0, 1.9, 1.8, 1.7, 1.6, 1.5]
+        args.no_shift = True
     elif args.cr == "thickening":
         possible_p_s = [2.0, 2.5, 3.0, 3.5, 4.0, 5.0]
     else:
         possible_p_s = [2.0]
+        args.no_shift = True
     assert (args.p_s <= len(possible_p_s)), "p-s is too large... choose something smaller"
     delta_s = [0.001]
     K_s = [1.0]
