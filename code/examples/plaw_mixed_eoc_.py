@@ -12,12 +12,14 @@ def compute_rates(errors, res):
     return [np.log(errors[i]/errors[i+1])/np.log(res[i+1]/res[i])
                                  for i in range(len(res)-1)]
 
-def compute_error(z, S_ex, u_ex, p_): # TODO: Why do we get in trouble without that regularisation?
+def compute_error(z, S_ex, u_ex, p_, eps=0):
     S, u = z.subfunctions
-    F_u = (1e-12 + fd.inner(fd.grad(u), fd.grad(u)))**(0.25*p_ - 0.5) * fd.grad(u)
-    F_u -= (1e-12 + fd.inner(fd.grad(u_ex), fd.grad(u_ex)))**(0.25*p_ - 0.5) * fd.grad(u_ex)
-    F_S = (1e-12 + fd.inner(S, S))**(0.25*(p_/(p_-1)) - 0.5) * S
-#    F_S -= (1e-12 + fd.inner(S_ex, S_ex))**(0.25*(p_/(p_-1)) - 0.5) * S_ex   # This crashes if I add the float in const_rel....
+    F_u_1 = (eps + fd.inner(fd.grad(u), fd.grad(u)))**(0.25*p_ - 0.5) * fd.grad(u)
+    F_u_2 = (eps + fd.inner(fd.grad(u_ex), fd.grad(u_ex)))**(0.25*p_ - 0.5) * fd.grad(u_ex)
+    F_S_1 = (eps + fd.inner(S, S))**(0.25*(p_/(p_-1)) - 0.5) * S
+    F_S_2 = (eps + fd.inner(S_ex, S_ex))**(0.25*(p_/(p_-1)) - 0.5) * S_ex
+    F_u = F_u_1 - F_u_2
+    F_S = F_S_1 - F_S_2
     natural_d_u = fd.assemble(fd.inner(F_u, F_u) * fd.dx)**0.5
     natural_d_S = fd.assemble(fd.inner(F_S, F_S) * fd.dx)**0.5
     return natural_d_S, natural_d_u
@@ -110,10 +112,6 @@ if __name__ == "__main__":
         a = fd.assemble(fd.dot(S-S_exact, S-S_exact)*fd.dx)
 
         # Compute errors
-        # Compute explicitly the p=2 case for testing
-#        natural_distance_S = fd.assemble(fd.inner(S-S_exact, S-S_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
-#        natural_distance_u = fd.assemble(fd.inner(fd.grad(u-u_exact), fd.grad(u-u_exact))**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
-        # Let's try 
         natural_distance_S, natural_distance_u = compute_error(solver_.z, S_exact, u_exact, p_s[-1])
         errors["F_potential"].append(natural_distance_u)
         errors["F*_flux"].append(natural_distance_S)
