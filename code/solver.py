@@ -1,4 +1,5 @@
 import firedrake as fd
+from petsc4py import PETSc
 
 import numpy as np
 
@@ -141,16 +142,22 @@ class NonlinearEllipticSolver(object):
 
     def update_max_shift(self):
         # Compute the max shift
-        z_current = self.z.copy(deepcopy=True)
         if self.formulation_u:
-            u_current = z_current
+            u = self.z
         elif self.formulation_Su:
-            _, u_current = z_current.subfunctions
-        else:
-            raise(NotImplementedError)
-        gradu_current_squared = fd.project(fd.inner(fd.grad(u_current), fd.grad(u_current)), fd.FunctionSpace(self.z.ufl_domain(), "DG", 2*(self.k-1)))
-        self.max_shift.assign(np.max(np.sqrt(np.absolute(gradu_current_squared.vector().get_local()))))
+            _, u = self.z.subfunctions
+        grad_u_squared = self._dg2km1_aux_fun
+        grad_u_squared.project(fd.inner(fd.grad(u), fd.grad(u)))
+        with grad_u_squared.dat.vec_ro as v:
+            Linfty_norm = v.norm(PETSc.NormType.NORM_MAX)
+        shift = Linfty_norm ** 0.5
+        print(fd.RED % f'Setting shift to {shift}')
+        self.max_shift.assign(shift)
 
+    @fd.utils.cached_property
+    def _dg2km1_aux_fun(self):
+        space = fd.FunctionSpace(self.z.ufl_domain(), "DG", 2*(self.k-1))
+        return fd.Function(space)
 
     def split_variables(self, z, z_):
         fields = {}
