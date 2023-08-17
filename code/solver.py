@@ -98,9 +98,6 @@ class NonlinearEllipticSolver(object):
             for param in continuation_params[param_str][counter:]:
                 getattr(self, param_str).assign(param)
 
-                if not(self.no_shift):
-                    self.update_max_shift() # TODO: This updates the shift on the outside; it's probably good to also update inside Newton
-
                 output_info = "Solving for "
                 for param_ in continuation_params.keys():
                     output_info += param_
@@ -115,6 +112,12 @@ class NonlinearEllipticSolver(object):
 
     @fd.utils.cached_property
     def nonlinear_variational_solver(self):
+
+        if self.no_shift:
+            pre_function_callback = None
+        else:
+            def pre_function_callback(_):
+                self.update_max_shift()
 
         if self.smoothing:
             F = self.lhs(self.z, self.z_)
@@ -131,6 +134,7 @@ class NonlinearEllipticSolver(object):
 
         problem = fd.NonlinearVariationalProblem(F, self.z, bcs=self.bcs, J=self.get_jacobian())
         solver = fd.NonlinearVariationalSolver(problem,
+                                               pre_function_callback=pre_function_callback,
                                                post_function_callback=post_function_callback,
                                                solver_parameters=self.get_parameters())
         return solver
