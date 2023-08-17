@@ -14,8 +14,8 @@ def compute_rates(errors, res):
                                  for i in range(len(res)-1)]
 
 class PowerLaw(NonlinearEllipticProblem):
-    def __init__(self, p, delta, K, alpha=1.01):
-        super().__init__(p=p, delta=delta, K=K)
+    def __init__(self, p, delta, K, max_shift, alpha=1.01):
+        super().__init__(p=p, delta=delta, K=K, max_shift=max_shift)
         self.alpha = alpha
 
     def mesh(self):
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-shift", dest="no_shift", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
     parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
-    parser.add_argument("--penalty", choices=["const_rel","plaw","quadratic"], default="const_rel")
+    parser.add_argument("--penalty", choices=["const_rel","plaw","quadratic","p-d"], default="p-d")
     parser.add_argument("--cr", default="thinning", choices=["newtonian","thinning","thickening"]) # Controls if p is larger or smaller than 2
     parser.add_argument("--p-s", type=int, default=1) # Larger = further away from Newtonian (0 = Newtonian)
     parser.add_argument("--k", type=int, default=1)
@@ -58,8 +58,9 @@ if __name__ == "__main__":
     p = fd.Constant(2.0)
     K = fd.Constant(1.0)
     delta = fd.Constant(0.0001)
+    max_shift = fd.Constant(0.)
 
-    problem_ = PowerLaw(p=p, delta=delta, K=K, alpha=args.alpha)
+    problem_ = PowerLaw(p=p, delta=delta, K=K, max_shift=max_shift, alpha=args.alpha)
     solver_class = {"CG": ConformingSolver,
                     "CR": CrouzeixRaviartSolver,
                     "DG": DGSolver}[args.disc]
@@ -77,13 +78,11 @@ if __name__ == "__main__":
         possible_p_s = [2.0]
         args.no_shift = True
     assert (args.p_s <= len(possible_p_s)), "p-s is too large... choose something smaller"
-    delta_s = [0.001]
-    K_s = [1.0]
     if args.cr == "newtonian":
         p_s = [2.0]
     else:
         p_s = possible_p_s[:(args.p_s+1)]
-    continuation_params = {"p": p_s, "K": K_s}
+    continuation_params = {"p": p_s}
 
     # Choose resolutions
     res = [2**i for i in range(2,args.nrefs+2)]
@@ -93,8 +92,7 @@ if __name__ == "__main__":
     errors = {"F": [], "modular": [], "Lp": []}
 
     for nref in range(1, len(res)+1):
-        solver_kwargs = {"nref": nref, "smoothing": args.smoothing}
-        if args.disc in ["CR", "DG"]: solver_kwargs["no_shift"] = args.no_shift
+        solver_kwargs = {"nref": nref, "smoothing": args.smoothing, "no_shift": args.no_shift}
         solver_ = solver_class(problem_, **solver_kwargs)
 
         if (np.abs(float(delta)) < 1e-10): problem_.interpolate_initial_guess(solver_.z)

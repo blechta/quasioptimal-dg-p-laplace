@@ -40,12 +40,13 @@ class NonlinearEllipticSolver(object):
 
     def function_space(self, mesh, k=1): raise NotImplementedError
 
-    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False):
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, no_shift=True):
 
         self.problem = problem
         self.nref = nref
         self.solver_type = solver_type
         self.smoothing = smoothing
+        self.no_shift = no_shift
         self.formulation_u = (self.problem.formulation == "u")
         self.formulation_Su = (self.problem.formulation == "S-u")
         self.k = k
@@ -74,9 +75,10 @@ class NonlinearEllipticSolver(object):
                 setattr(self, param_str, fd.Constant(getattr(self, param_str)))
             self.const_rel_params[param_str] = getattr(self, param_str)
 
-        # Make sure "p" and "delta" are defined
+        # Make sure "p", "delta" and "max_shift" are defined
         if not("p" in list(self.problem.const_rel_params.keys())): self.p = fd.Constant(2.0)
         if not("delta" in list(self.problem.const_rel_params.keys())): self.delta = fd.Constant(0.0)
+        if not("max_shift" in list(self.problem.const_rel_params.keys())): self.max_shift = fd.Constant(0.0)
 
 
     def solve(self, continuation_params):
@@ -94,6 +96,9 @@ class NonlinearEllipticSolver(object):
         for param_str in continuation_params.keys():
             for param in continuation_params[param_str][counter:]:
                 getattr(self, param_str).assign(param)
+
+                if not(self.no_shift):
+                    self.update_max_shift() # TODO: This updates the shift on the outside; it's probably good to also update inside Newton
 
                 output_info = "Solving for "
                 for param_ in continuation_params.keys():
@@ -133,6 +138,18 @@ class NonlinearEllipticSolver(object):
     def get_jacobian(self):
         J0 = fd.derivative(self.lhs(self.z, self.z_), self.z)
         return J0
+
+    def update_max_shift(self):
+        # Compute the max shift
+        z_current = self.z.copy(deepcopy=True)
+        if self.formulation_u:
+            u_current = z_current
+        elif self.formulation_Su:
+            _, u_current = z_current.subfunctions
+        else:
+            raise(NotImplementedError)
+        gradu_current_squared = fd.project(fd.inner(fd.grad(u_current), fd.grad(u_current)), fd.FunctionSpace(self.z.ufl_domain(), "DG", 2*(self.k-1)))
+        self.max_shift.assign(np.max(np.sqrt(np.absolute(gradu_current_squared.vector().get_local()))))
 
 
     def split_variables(self, z, z_):
@@ -235,29 +252,29 @@ class ConformingSolver(NonlinearEllipticSolver):
 
 class CrouzeixRaviartSolver(ConformingSolver):
 
-    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel", no_shift=True):
-        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing)
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="p-d", no_shift=True):
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing, no_shift=no_shift)
         self.penalty_form = penalty_form
-        self.no_shift = no_shift
         assert penalty_form in ["quadratic", "p-d", "plaw", "const_rel"], "I don't know that form of the penalty..."
 
     def function_space(self, mesh, k):
         return fd.FunctionSpace(mesh, "CR", k)
 
-    def ip_penalty_jump(self, h_factor, vec, form="const_rel"):
+    def ip_penalty_jump(self, h_factor, vec, form="p-d"):
         """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
         assert form in ["const_rel", "p-d", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
         U_jmp = h_factor * vec
         if self.formulation_Su or (form == "p-d"):
             p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
             delta = self.problem.const_rel_params.get("delta", 0.0001) # Get delta
-            jmp_penalty = (delta + fd.inner(U_jmp, U_jmp)) ** (0.5*p- 1) * U_jmp
+            jmp_penalty = (delta + self.max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*p- 1) * U_jmp
         elif form == "const_rel":
-            jmp_penalty = self.problem.const_rel(U_jmp)
+            raise(NotImplementedError) # TODO: Need one relation for the bulk without shift and another for the penalty with shift...
+#            jmp_penalty = self.problem.const_rel(U_jmp, shift=self.max_shift)
         if form == "plaw":
             p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
             K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
-            jmp_penalty = K_ * fd.inner(U_jmp, U_jmp) ** ((p-2.)/2.) * U_jmp
+            jmp_penalty = K_ * (self.max_shift + fd.inner(U_jmp, U_jmp)) ** ((p-2.)/2.) * U_jmp
         elif form == "quadratic":
             K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
             jmp_penalty = K_ * U_jmp
@@ -280,7 +297,7 @@ class CrouzeixRaviartSolver(ConformingSolver):
 
 class DGSolver(CrouzeixRaviartSolver):
 
-    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="const_rel", no_shift=True):
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="p-d", no_shift=True):
         super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing, penalty_form=penalty_form, no_shift=no_shift)
         self.bcs = ()
 
@@ -336,98 +353,6 @@ class DGSolver(CrouzeixRaviartSolver):
         else:
             raise NotImplementedError
         return F
-
-    def get_jacobian(self):
-        if self.no_shift:# or (float(self.p) <= 2.0):
-            J0 = fd.derivative(self.lhs(self.z, self.z_), self.z)
-        else:
-            # Define functions and test functions
-            z_ = fd.TestFunction(self.Z)
-            fields = self.split_variables(self.z, z_)
-            u = fields["u"]
-            v = fields["v"]
-            S = fields.get("S")
-            T = fields.get("T")
-            # Also a trial function
-            w = fd.TrialFunction(self.Z)
-            # ==================== TEST =======================
-            fields_ = self.split_variables(w, z_)
-            u0 = fields_["u"]
-            D0 = fd.grad(u0)
-            # ==================== TEST =======================
-
-            # Compute the max shift
-            z_current = self.z.copy(deepcopy=True)
-            if self.formulation_u:
-                u_current = z_current
-            elif self.formulation_Su:
-                _, u_current = z_current.subfunctions
-            else:
-                raise(NotImplementedError)
-            gradu_current_squared = fd.project(fd.inner(fd.grad(u_current), fd.grad(u_current)), fd.FunctionSpace(self.z.ufl_domain(), "DG", 2*(self.k-1)))
-            max_shift = np.max(np.sqrt(np.absolute(gradu_current_squared.vector().get_local())))
-
-            # For the DG terms
-            alpha = 10. * self.k**2
-            n = fd.FacetNormal(self.Z.ufl_domain())
-            h = fd.CellDiameter(self.Z.ufl_domain())
-            U_jmp = (2./fd.avg(h)) * fd.avg(fd.outer(u,n))
-            U_jmp_bdry = (1./h) * fd.outer(u, n)
-            delta = self.problem.const_rel_params.get("delta", 0.0001) # Get delta
-            jmp_penalty = (delta + max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*self.p- 1) * U_jmp # We include the shift here!
-            jmp_penalty_bdry = (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 1) * U_jmp_bdry # We include the shift here!
-
-            if self.formulation_u:
-                G = self.problem.const_rel(fd.grad(u))
-            elif self.formulation_Su:
-                G = self.problem.const_rel(S)
-            else:
-                raise NotImplementedError
-
-            if self.formulation_u:
-                F = (
-                    fd.inner(G, fd.grad(v)) * fd.dx # TODO: Need a different formulation for LDG
-                    - fd.inner(fd.avg(G), 2*fd.avg(fd.outer(v, n))) * fd.dS
-                    - fd.inner(G, fd.outer(v, n)) * fd.ds
-                    + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
-                    + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
-                )
-                # ======================== TEST (write the Newton jacobian explicitly) ======================00
-#                max_shift = 0.
-                D = fd.grad(u)
-                U_jmp0 = (2./fd.avg(h)) * fd.avg(fd.outer(u0,n))
-                U_jmp_bdry0 = (1./h) * fd.outer(u0, n)
-                jmp_penalty0 = (delta + max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*self.p- 1) * U_jmp0 # We include the shift here!
-                jmp_penalty0 += (self.p - 2) * (delta + max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*self.p- 2) * fd.dot(U_jmp0,U_jmp) * U_jmp # We include the shift here!
-                jmp_penalty_bdry0 = (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 1) * U_jmp_bdry0 # We include the shift here!
-                jmp_penalty_bdry0 += (delta + max_shift + fd.inner(U_jmp_bdry, U_jmp_bdry)) ** (0.5*self.p- 2) * fd.dot(U_jmp_bdry0, U_jmp_bdry) * U_jmp_bdry # We include the shift here!
-                J0 = (
-                    fd.inner((self.delta + fd.inner(D,D))**(0.5*self.p - 1) * D0, fd.grad(v)) * fd.dx
-                    + (self.p - 2) * (self.delta + fd.inner(D,D))**(0.5*self.p - 2) * fd.dot(D0, fd.grad(u)) * fd.dot(fd.grad(v), fd.grad(u)) * fd.dx
-                    - fd.inner(fd.avg((self.delta + fd.inner(D,D))**(0.5*self.p - 1) * D0), 2*fd.avg(fd.outer(v, n))) * fd.dS
-                    - (self.p - 2) * fd.inner(fd.avg((self.delta + fd.inner(D,D))**(0.5*self.p - 2) * fd.dot(D0, fd.grad(u))*fd.grad(u)), 2*fd.avg(fd.outer(v, n))) * fd.dS
-                    - fd.inner((self.delta + fd.inner(D,D))**(0.5*self.p - 1) * D0, fd.outer(v, n)) * fd.ds
-                    - (self.p - 2) * fd.inner((self.delta + fd.inner(D,D))**(0.5*self.p - 2) * fd.dot(D0, fd.grad(u))*fd.grad(u), fd.outer(v, n)) * fd.ds
-                    + alpha * fd.inner(jmp_penalty0, 2*fd.avg(fd.outer(v, n))) * fd.dS
-                    + alpha * fd.inner(jmp_penalty_bdry0, fd.outer(v,n)) * fd.ds
-                )
-                # ======================== TEST (write the Newton jacobian explicitly) ======================00
-            elif self.formulation_Su:
-                F = (
-                    -fd.inner(G, T) * fd.dx
-                    + fd.inner(fd.grad(u), T) * fd.dx
-                    - fd.inner(fd.avg(T), 2*fd.avg(fd.outer(u, n))) * fd.dS # Remove this one for IIDG
-                    - fd.inner(T, fd.outer(u, n)) * fd.ds # Remove this one for IIDG
-                    + fd.inner(S, fd.grad(v)) * fd.dx
-                    - fd.inner(fd.avg(S), 2*fd.avg(fd.outer(v, n))) * fd.dS
-                    - fd.inner(S, fd.outer(v, n)) * fd.ds
-                    + alpha * inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
-                    + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
-                )
-
-#            J0 = fd.derivative(F, self.z, w)
-
-            return J0
 
     def W1pnorm(self, z, p):
 
