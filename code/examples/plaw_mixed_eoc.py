@@ -13,18 +13,6 @@ def compute_rates(errors, res):
     return [np.log(errors[i]/errors[i+1])/np.log(res[i+1]/res[i])
                                  for i in range(len(res)-1)]
 
-#def compute_error(z, S_ex, u_ex, p_, eps=0):
-#    S, u = z.subfunctions
-#    F_u_1 = (eps + fd.inner(fd.grad(u), fd.grad(u)))**(0.25*p_ - 0.5) * fd.grad(u)
-#    F_u_2 = (eps + fd.inner(fd.grad(u_ex), fd.grad(u_ex)))**(0.25*p_ - 0.5) * fd.grad(u_ex)
-#    F_S_1 = (eps + fd.inner(S, S))**(0.25*(p_/(p_-1)) - 0.5) * S
-#    F_S_2 = (eps + fd.inner(S_ex, S_ex))**(0.25*(p_/(p_-1)) - 0.5) * S_ex
-#    F_u = F_u_1 - F_u_2
-#    F_S = F_S_1 - F_S_2
-#    natural_d_u = fd.assemble(fd.inner(F_u, F_u) * fd.dx)**0.5
-#    natural_d_S = fd.assemble(fd.inner(F_S, F_S) * fd.dx)**0.5
-#    return natural_d_S, natural_d_u
-
 class PowerLaw(NonlinearEllipticProblem_Su):
     def __init__(self, p, delta, max_shift, alpha=1.01, p_final=0):
         """ Passing p_final only matters when choosing an exact potential, since the exact flux is computed
@@ -53,6 +41,7 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         D = fd.grad(self.exact_potential(Z))
         return self.const_rel_inverse(D)
         # Or define the exact flux directly! We then only have access to the gradient of the potential but that's OK.
+        # FIXME: When doing this the wrong solution is computed...
         ##x, y = fd.SpatialCoordinate(Z.ufl_domain())
         ##return (x*x + y*y) ** (0.5*self.alpha)  * fd.as_vector([1., 1.])
 
@@ -74,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
     parser.add_argument("--no-shift", dest="no_shift", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
-    parser.add_argument("--alpha", type=float, default=2.0) # Measures how singular is the exact solution; default value should yield linear rate
+    parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
     parser.add_argument("--penalty", choices=["const_rel","plaw","quadratic","p-d"], default="p-d")
     parser.add_argument("--cr", default="thinning", choices=["newtonian","thinning","thickening"]) # Controls if p is larger or smaller than 2
     parser.add_argument("--p-s", type=int, default=1) # Larger = further away from Newtonian (0 = Newtonian)
@@ -157,6 +146,6 @@ if __name__ == "__main__":
     pprint.pprint(convergence_rates)
 
     # Test
-    fd.File("test.pvd").write(S, fd.Function(fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)).interpolate(S_exact))
-    fd.File("test1.pvd").write(fd.project(Du, fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)), fd.interpolate(Du_exact, fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)))
+#    fd.File("test.pvd").write(S, fd.Function(fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)).interpolate(S_exact))
+#    fd.File("test1.pvd").write(fd.project(Du, fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)), fd.interpolate(Du_exact, fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)))
 #    fd.File("test1.pvd").write(u, fd.Function(fd.FunctionSpace(solver_.z.ufl_domain(), "DG", 1)).interpolate(u_exact))

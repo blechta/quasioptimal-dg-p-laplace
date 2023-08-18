@@ -33,7 +33,6 @@ class PowerLaw(NonlinearEllipticProblem):
         sols = self.exact_solution(v.function_space())
         S = self.const_rel(fd.grad(sols))
         L = - fd.div(S) * v * fd.dx
-#        L = fd.inner(S, fd.grad(v)) * fd.dx # Should this work for DG? I think not
         return L
 
     def interpolate_initial_guess(self, z):

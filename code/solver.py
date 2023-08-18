@@ -106,7 +106,7 @@ class NonlinearEllipticSolver(object):
                 for param_ in continuation_params.keys():
                     output_info += param_
                     output_info += " = %.8f, "%float(getattr(self, param_))
-                    fd.warning(fd.RED % (output_info))
+                    fd.warning(fd.BLUE % (output_info))
 
                 # Run SNES
                 self.nonlinear_variational_solver.solve()
