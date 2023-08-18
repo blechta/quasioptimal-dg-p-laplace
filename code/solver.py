@@ -194,11 +194,11 @@ class NonlinearEllipticSolver(object):
 
     def natural_F(self, w_1, w_2, conjugate=False):
         if conjugate: # Computes the natural distance with p', delta^{p-1}
-            p_ = float(self.p/(self.p-1.))
-            delta_ = float(self.delta**(self.p - 1.))
+            p_ = self.p/(self.p-1.)
+            delta_ = self.delta**(self.p - 1.)
         else:
-            p_ = float(self.p)
-            delta_ = float(self.delta)
+            p_ = self.p
+            delta_ = self.delta
 
         F_1 = (delta_ + fd.inner(w_1, w_1)**(1/2.))**(0.5*p_-1) * w_1
         F_2 = (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*p_- 1) * w_2
@@ -267,7 +267,6 @@ class ConformingSolver(NonlinearEllipticSolver):
             G = self.problem.const_rel(fd.grad(u))
         elif self.formulation_Su:
             G = self.problem.const_rel(S)
-#            G = fd.inner(S,S)**(0.5*(self.p/(self.p-1)) -1) * S
         else:
             raise NotImplementedError
 

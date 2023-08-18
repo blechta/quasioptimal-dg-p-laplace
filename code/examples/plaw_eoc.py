@@ -42,7 +42,7 @@ class PowerLaw(NonlinearEllipticProblem):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=""" Just to check things don't break; convergence rate later""")
+        description=""" Primal Formulation""")
     parser.add_argument("--disc", choices=["CR","CG","DG"], default="CG")
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
     parser.add_argument("--no-shift", dest="no_shift", default=False, action="store_true")
