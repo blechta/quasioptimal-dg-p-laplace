@@ -42,8 +42,8 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         return self.const_rel_inverse(D)
         # Or define the exact flux directly! We then only have access to the gradient of the potential but that's OK.
         # FIXME: When doing this the wrong solution is computed...
-        ##x, y = fd.SpatialCoordinate(Z.ufl_domain())
-        ##return (x*x + y*y) ** (0.5*self.alpha)  * fd.as_vector([1., 1.])
+#        x, y = fd.SpatialCoordinate(Z.ufl_domain())
+#        return (x*x + y*y) ** (0.5*self.alpha)  * fd.as_vector([1., 1.])
 
     def rhs(self, z_):
         S_exact = self.exact_flux(z_.function_space())
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     h_s = []#[1./re for re in res]
 
     # To store the errors
-    errors = {"F*_flux": [], "F_potential": [], "modular": [], "Lp'_flux": [], "Lp_potential": []}
+    errors = {"F*_flux": [], "F_potential": [], "modular": [], "Lp'_flux": []}#, "Lp_potential": []}
 
     for nref in range(1, len(res)+1):
         solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing, no_shift=args.no_shift)
@@ -113,13 +113,14 @@ if __name__ == "__main__":
         S, u = solver_.z.subfunctions
         Du = fd.grad(u)
 
-        u_exact = problem_.exact_potential(solver_.Z)
         S_exact = problem_.exact_flux(solver_.Z)
-        #Du_exact = problem_.const_rel(S_exact)
+        # Use this when choosing the exact potential
+        u_exact = problem_.exact_potential(solver_.Z)
         Du_exact = fd.grad(u_exact)
+        # Use this when choosing the exact flux
+#        Du_exact = problem_.const_rel(S_exact)
 
         # Compute errors
-#        natural_distance_S, natural_distance_u = compute_error(solver_.z, S_exact, u_exact, p_s[-1])
         natural_distance_S = solver_.natural_F(w_1=S, w_2=S_exact, conjugate=True)
         natural_distance_u = solver_.natural_F(w_1=Du, w_2=Du_exact)
         errors["F_potential"].append(natural_distance_u)
@@ -129,15 +130,15 @@ if __name__ == "__main__":
         else:
             modular = solver_.modular(u)
             errors["modular"].append(modular)
-        Lp_error_u = fd.assemble(fd.inner(u-u_exact, u-u_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
-        errors["Lp_potential"].append(Lp_error_u)
+#        Lp_error_u = fd.assemble(fd.inner(u-u_exact, u-u_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
+#        errors["Lp_potential"].append(Lp_error_u)
         p_prime_ = p_s[-1]/(p_s[-1]-1.)
         Lp_error_S = fd.assemble(fd.inner(S-S_exact, S-S_exact)**(p_prime_/2.) * fd.dx)**(1/p_prime_)
         errors["Lp'_flux"].append(Lp_error_S)
 
 
     convergence_rates = {err_type: compute_rates(errors[err_type], res)
-                         for err_type in ["F*_flux", "F_potential", "modular", "Lp'_flux", "Lp_potential"]}
+                         for err_type in ["F*_flux", "F_potential", "modular", "Lp'_flux"]}#, "Lp_potential"]}
 
     print("Mesh sizes (h_max, h_avg): ", h_s)
     print("Computed errors: ")
