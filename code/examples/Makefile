@@ -39,10 +39,10 @@ primal_dg: pre_primal square.msh
 	done
 
 mixed_cg: pre_mixed square.msh
-	$(exec) plaw_mixed_eoc.py --disc CG --nrefs 3 --cr newtonian --alpha 1.01 2>&1 | tee output/mixed/CG_a_1.01_newtonian_nref_6.log
+	$(exec) plaw_mixed_eoc.py --disc CG --nrefs 6 --cr newtonian --alpha 1.01 2>&1 | tee output/mixed/CG_a_1.01_newtonian_nref_6.log
 	for num in 1 2 3 4 5 ; do \
-		$(exec) plaw_mixed_eoc.py --disc CG --nrefs 3 --cr thinning --p-s $$num --alpha 1.01 2>&1 | tee "output/mixed/CG_a_1.01_p--'$$num'_thinning_nref_6.log" ;\
-		$(exec) plaw_mixed_eoc.py --disc CG --nrefs 3 --cr thickening --p-s $$num --alpha 1.01 2>&1 | tee "output/mixed/CG_a_1.01_p--'$$num'_thickening_nref_6.log" ;\
+		$(exec) plaw_mixed_eoc.py --disc CG --nrefs 6 --cr thinning --p-s $$num --alpha 1.01 2>&1 | tee "output/mixed/CG_a_1.01_p--'$$num'_thinning_nref_6.log" ;\
+		$(exec) plaw_mixed_eoc.py --disc CG --nrefs 6 --cr thickening --p-s $$num --alpha 1.01 2>&1 | tee "output/mixed/CG_a_1.01_p--'$$num'_thickening_nref_6.log" ;\
 	done
 
 mixed_cr: pre_mixed square.msh

@@ -65,6 +65,7 @@ if __name__ == "__main__":
                     "DG": DGSolver}[args.disc]
     solver_args = {"nref": args.nrefs, "smoothing": args.smoothing}
     if args.disc in ["CR","DG"]: solver_args["penalty_form"] = args.penalty
+    if args.disc == "CG": args.no_shift = True
 
     # Choose over which constitutive parameters we do continuation
     # First all the possibilities for p:
