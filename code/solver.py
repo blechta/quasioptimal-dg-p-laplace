@@ -331,7 +331,7 @@ class CrouzeixRaviartSolver(ConformingSolver):
         jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
         jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
         jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
-        power = 2.0 if (self.penalty_form == "quadratic") else float(self.p)
+        power = 2.0# if (self.penalty_form == "quadratic") else float(self.p)
         return (jumps)**(1./power)
 
 
