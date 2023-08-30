@@ -14,9 +14,10 @@ def compute_rates(errors, res):
                                  for i in range(len(res)-1)]
 
 class PowerLaw(NonlinearEllipticProblem):
-    def __init__(self, p, delta, K, max_shift, alpha=1.01):
+    def __init__(self, p, delta, K, max_shift, p_final, beta=1.0):
         super().__init__(p=p, delta=delta, K=K, max_shift=max_shift)
-        self.alpha = alpha
+        self.beta = beta
+        self.p_final = p_final
 
     def mesh(self):
         return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square.msh")
@@ -27,7 +28,8 @@ class PowerLaw(NonlinearEllipticProblem):
     def exact_solution(self, Z):
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
         cutoff = (1 - x*x)*(1 - y*y)
-        return cutoff * (x*x + y*y) ** (0.5*self.alpha)
+        alpha = 1.01 - (2*(1-self.beta))/self.p_final
+        return cutoff * (x*x + y*y) ** (0.5*alpha)
 
     def rhs(self, v):
         sols = self.exact_solution(v.function_space())
@@ -46,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
     parser.add_argument("--no-shift", dest="no_shift", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
-    parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
+    parser.add_argument("--beta", type=float, default=1.0) # Expected rate of convergence
     parser.add_argument("--penalty", choices=["const_rel","plaw","quadratic","p-d"], default="p-d")
     parser.add_argument("--cr", default="thinning", choices=["newtonian","thinning","thickening"]) # Controls if p is larger or smaller than 2
     parser.add_argument("--p-s", type=int, default=1) # Larger = further away from Newtonian (0 = Newtonian)
@@ -58,14 +60,6 @@ if __name__ == "__main__":
     K = fd.Constant(1.0)
     delta = fd.Constant(0.0001)
     max_shift = fd.Constant(0.)
-
-    problem_ = PowerLaw(p=p, delta=delta, K=K, max_shift=max_shift, alpha=args.alpha)
-    solver_class = {"CG": ConformingSolver,
-                    "CR": CrouzeixRaviartSolver,
-                    "DG": DGSolver}[args.disc]
-    solver_args = {"nref": args.nrefs, "smoothing": args.smoothing}
-    if args.disc in ["CR","DG"]: solver_args["penalty_form"] = args.penalty
-    if args.disc == "CG": args.no_shift = True
 
     # Choose over which constitutive parameters we do continuation
     # First all the possibilities for p:
@@ -83,6 +77,16 @@ if __name__ == "__main__":
     else:
         p_s = possible_p_s[:(args.p_s+1)]
     continuation_params = {"p": p_s}
+
+
+    problem_ = PowerLaw(p=p, delta=delta, K=K, max_shift=max_shift, p_final=p_s[-1], beta=args.beta)
+    solver_class = {"CG": ConformingSolver,
+                    "CR": CrouzeixRaviartSolver,
+                    "DG": DGSolver}[args.disc]
+    solver_args = {"nref": args.nrefs, "smoothing": args.smoothing}
+    if args.disc in ["CR","DG"]: solver_args["penalty_form"] = args.penalty
+    if args.disc == "CG": args.no_shift = True
+
 
     # Choose resolutions
     res = [2**i for i in range(2,args.nrefs+2)]
