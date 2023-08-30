@@ -54,7 +54,7 @@ class PowerLaw(NonlinearEllipticProblem_Su):
     def interpolate_initial_guess(self, z): # Just choose something non-zero...
         x, y = fd.SpatialCoordinate(z.ufl_domain())
         z.sub(0).interpolate(fd.as_vector([x-2, y+2]))
-        z.sub(1).interpolate((x+1)**2 * (1-x)**2 * (y+1)**2 * (1-y)**2)
+        z.sub(1).interpolate((x+2)**2 * (2-x)**2 * (y+2)**2 * (2-y)**2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -107,7 +107,9 @@ if __name__ == "__main__":
     for nref in range(1, len(res)+1):
         solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing, no_shift=args.no_shift)
 
-        if (np.abs(float(delta**(p_s[-1]-1))) < 1e-12): problem_.interpolate_initial_guess(solver_.z)
+        if (np.abs(float(delta**(p_s[-1]-1))) < 1e-12):
+            print(fd.RED % 'Setting initial guess...')
+            problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
         S, u = solver_.z.subfunctions
