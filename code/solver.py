@@ -285,10 +285,11 @@ class ConformingSolver(NonlinearEllipticSolver):
 
 class CrouzeixRaviartSolver(ConformingSolver):
 
-    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="p-d", no_shift=True):
-        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing, no_shift=no_shift)
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False,
+                 penalty_form=None, no_shift=True):
         self.penalty_form = penalty_form
-        assert penalty_form in ["quadratic", "p-d", "plaw", "const_rel"], "I don't know that form of the penalty..."
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k,
+                         smoothing=smoothing, no_shift=no_shift)
 
     def function_space(self, mesh, k):
         if self.formulation_u:
@@ -298,26 +299,35 @@ class CrouzeixRaviartSolver(ConformingSolver):
             eleS = fd.VectorElement("DG", mesh.ufl_cell(), k-1)
             return fd.FunctionSpace(mesh, fd.MixedElement([eleS, eleu]))
         else:
-            raise(NotImplementedError)
+            raise ValueError
 
-    def ip_penalty_jump(self, h_factor, vec, form="p-d"):
-        """ Define the nonlinear part in penalty term using the constitutive relation or just using the Lp norm"""
-        assert form in ["const_rel", "p-d", "plaw", "quadratic"], "That is not a valid form for the penalisation term"
+    def ip_penalty_jump(self, h_factor, vec, form=None):
+        """Define the nonlinear part in penalty term using the constitutive
+        relation or just using the Lp norm
+        """
+        if form is None:
+            form = "p-d"
+
         U_jmp = h_factor * vec
-        if self.formulation_Su or (form == "p-d"):
-            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
-            delta = self.problem.const_rel_params.get("delta", 0.0001) # Get delta
-            jmp_penalty = (delta + self.max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*p- 1) * U_jmp
+
+        if form == "p-d":
+            p = self.problem.const_rel_params.get("p", 2.0)
+            delta = self.problem.const_rel_params.get("delta", 0.0001)
+            jmp_penalty = (delta + self.max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*p-1) * U_jmp
         elif form == "const_rel":
-            raise(NotImplementedError) # TODO: Need one relation for the bulk without shift and another for the penalty with shift...
-#            jmp_penalty = self.problem.const_rel(U_jmp, shift=self.max_shift)
-        if form == "plaw":
-            p = self.problem.const_rel_params.get("p", 2.0) # Get power-law exponent
-            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
-            jmp_penalty = K_ * (self.max_shift + fd.inner(U_jmp, U_jmp)) ** ((p-2.)/2.) * U_jmp
+            raise NotImplementedError
+            # TODO: Need one relation for the bulk without shift and another
+            #       for the penalty with shift...
+            #jmp_penalty = self.problem.const_rel(U_jmp, shift=self.max_shift)
+        elif form == "plaw":
+            p = self.problem.const_rel_params.get("p", 2.0)
+            K_ = self.problem.const_rel_params.get("K", 1.0)
+            jmp_penalty = K_ * (self.max_shift + fd.inner(U_jmp, U_jmp)) ** (0.5*p-1) * U_jmp
         elif form == "quadratic":
-            K_ = self.problem.const_rel_params.get("K", 1.0) # Get consistency index
+            K_ = self.problem.const_rel_params.get("K", 1.0)
             jmp_penalty = K_ * U_jmp
+        else:
+            raise ValueError(f"Penalty form {form} not understood")
 
         return jmp_penalty
 
@@ -331,14 +341,17 @@ class CrouzeixRaviartSolver(ConformingSolver):
         jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
         jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
         jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
-        power = 2.0# if (self.penalty_form == "quadratic") else float(self.p)
+        power = 2.0
         return (jumps)**(1./power)
 
 
 class DGSolver(CrouzeixRaviartSolver):
 
-    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False, penalty_form="p-d", no_shift=True):
-        super().__init__(problem, nref=nref, solver_type=solver_type, k=k, smoothing=smoothing, penalty_form=penalty_form, no_shift=no_shift)
+    def __init__(self, problem, nref=1, solver_type="lu", k=1, smoothing=False,
+                 penalty_form=None, no_shift=True):
+        super().__init__(problem, nref=nref, solver_type=solver_type, k=k,
+                         smoothing=smoothing, penalty_form=penalty_form,
+                         no_shift=no_shift)
         self.bcs = ()
 
     def function_space(self, mesh, k):
@@ -349,7 +362,7 @@ class DGSolver(CrouzeixRaviartSolver):
             eleS = fd.VectorElement("DG", mesh.ufl_cell(), k-1)
             return fd.FunctionSpace(mesh, fd.MixedElement([eleS, eleu]))
         else:
-            raise(NotImplementedError)
+            raise ValueError
 
     def lhs(self, z, z_):
 
