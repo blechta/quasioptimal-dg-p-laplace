@@ -28,22 +28,37 @@ class PowerLaw(NonlinearEllipticProblem_Su):
     def const_rel(self, S):
         return (self.delta**(self.p-1) + fd.inner(S,S)) ** (0.5*(self.p/(self.p-1)) - 1) * S
 
-    def const_rel_inverse(self, D): # This is only really the inverse if delta=0. This is only used when computing the exact flux
+    def approx_const_rel_inverse(self, D):
+        """This is an S = S(D) constitutive relation which
+        isn't necesarrily an inverse to self.const_rel().
+        It is only used to compute a manufactured flux.
+        """
         return fd.inner(D, D) ** (0.5*self.p_final - 1) * D
 
-    def exact_potential(self, Z):
+    def approx_exact_potential(self, Z):
+        """This is a potential which isn't necessarily an exact potential.
+        It is only used to compute a manufactured flux.
+        """
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
         cutoff = (1 - x*x)*(1 - y*y)
         return cutoff * (x*x + y*y) ** (0.5*self.alpha)
 
+    def const_rel_inverse(self, D):
+        if float(self.delta) == 0:
+            return self.approx_const_rel_inverse(D)
+        else:
+            return None
+
+    def exact_potential(self, Z):
+        if float(self.delta) == 0:
+            return self.approx_exact_potential(Z)
+        else:
+            return None
+
     def exact_flux(self, Z):
-        # Compute it from the exact potential
-        D = fd.grad(self.exact_potential(Z))
-        return self.const_rel_inverse(D)
-        # Or define the exact flux directly! We then only have access to the gradient of the potential but that's OK.
-        # FIXME: When doing this the wrong solution is computed...
-#        x, y = fd.SpatialCoordinate(Z.ufl_domain())
-#        return (x*x + y*y) ** (0.5*self.alpha)  * fd.as_vector([1., 1.])
+        # Compute it from a potential
+        D = fd.grad(self.approx_exact_potential(Z))
+        return self.approx_const_rel_inverse(D)
 
     def rhs(self, z_):
         S_exact = self.exact_flux(z_.function_space())
@@ -102,7 +117,7 @@ if __name__ == "__main__":
     h_s = []#[1./re for re in res]
 
     # To store the errors
-    errors = {"F*_flux": [], "F_potential": [], "modular": [], "Lp'_flux": []}#, "Lp_potential": []}
+    errors = {"F*_flux": [], "F_potential": [], "modular": [], "Lp'_flux": [], "Lp_potential": []}
 
     for nref in range(1, len(res)+1):
         solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing, no_shift=args.no_shift)
@@ -116,11 +131,8 @@ if __name__ == "__main__":
         Du = fd.grad(u)
 
         S_exact = problem_.exact_flux(solver_.Z)
-        # Use this when choosing the exact potential
+        Du_exact = problem_.const_rel(S_exact)
         u_exact = problem_.exact_potential(solver_.Z)
-        Du_exact = fd.grad(u_exact)
-        # Use this when choosing the exact flux
-#        Du_exact = problem_.const_rel(S_exact)
 
         # Compute errors
         quad_degree = 4
@@ -136,15 +148,18 @@ if __name__ == "__main__":
         else:
             modular = solver_.modular(u)
             errors["modular"].append(modular)
-#        Lp_error_u = fd.assemble(fd.inner(u-u_exact, u-u_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
-#        errors["Lp_potential"].append(Lp_error_u)
+        if u_exact is not None:
+            Lp_error_u = fd.assemble(fd.inner(u-u_exact, u-u_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
+        else:
+            Lp_error_u = np.inf
+        errors["Lp_potential"].append(Lp_error_u)
         p_prime_ = p_s[-1]/(p_s[-1]-1.)
         Lp_error_S = fd.assemble(fd.inner(S-S_exact, S-S_exact)**(p_prime_/2.) * fd.dx)**(1/p_prime_)
         errors["Lp'_flux"].append(Lp_error_S)
 
 
     convergence_rates = {err_type: compute_rates(errors[err_type], res)
-                         for err_type in ["F*_flux", "F_potential", "modular", "Lp'_flux"]}#, "Lp_potential"]}
+                         for err_type in ["F*_flux", "F_potential", "modular", "Lp'_flux", "Lp_potential"]}
 
     print("Mesh sizes (h_max, h_avg): ", h_s)
     print("Computed errors: ")
