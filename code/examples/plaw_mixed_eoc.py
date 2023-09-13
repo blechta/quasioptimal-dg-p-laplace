@@ -123,8 +123,12 @@ if __name__ == "__main__":
 #        Du_exact = problem_.const_rel(S_exact)
 
         # Compute errors
-        natural_distance_S = solver_.natural_F(w_1=S, w_2=S_exact, conjugate=True)
-        natural_distance_u = solver_.natural_F(w_1=Du, w_2=Du_exact)
+        quad_degree = 4
+        natural_distance_S = solver_.natural_F(w_1=S, w_2=S_exact,
+                                               conjugate=True,
+                                               quad_degree=quad_degree)
+        natural_distance_u = solver_.natural_F(w_1=Du, w_2=Du_exact,
+                                               quad_degree=quad_degree)
         errors["F_potential"].append(natural_distance_u)
         errors["F*_flux"].append(natural_distance_S)
         if args.disc == "CG":

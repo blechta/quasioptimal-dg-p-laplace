@@ -192,7 +192,7 @@ class NonlinearEllipticSolver(object):
             raise NotImplementedError
         return fields
 
-    def natural_F(self, w_1, w_2, conjugate=False):
+    def natural_F(self, w_1, w_2, conjugate=False, quad_degree=None):
         if conjugate: # Computes the natural distance with p', delta^{p-1}
             p_ = self.p/(self.p-1.)
             delta_ = self.delta**(self.p - 1.)
@@ -201,9 +201,10 @@ class NonlinearEllipticSolver(object):
             delta_ = self.delta
 
         F_1 = (delta_ + fd.inner(w_1, w_1)**(1/2.))**(0.5*p_-1) * w_1
-        F_2 = (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*p_- 1) * w_2
+        F_2 = (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*p_-1) * w_2
         F_ = F_1 - F_2
-        return (fd.assemble(fd.inner(F_, F_) * fd.dx))**0.5
+        dx = fd.dx(degree=quad_degree)
+        return (fd.assemble(fd.inner(F_, F_) * dx))**0.5
 
     def W1pnorm(self, z, p):
         if self.formulation_u:
