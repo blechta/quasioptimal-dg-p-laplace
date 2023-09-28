@@ -14,12 +14,12 @@ def compute_rates(errors, res):
                                  for i in range(len(res)-1)]
 
 class PowerLaw(NonlinearEllipticProblem_Su):
-    def __init__(self, p, delta, max_shift, alpha=1.01, p_final=0):
+    def __init__(self, p, delta, max_shift, beta=1.0, p_final=0):
         """ Passing p_final only matters when choosing an exact potential, since the exact flux is computed
         through the inverse constitutive relation (and so otherwise the wrong RHS would get computed). If the exact flux
         is chosen instead, this doesn't play a role"""
         super().__init__(p=p,delta=delta,max_shift=max_shift)
-        self.alpha = alpha
+        self.beta = beta
         self.p_final = p_final
 
     def mesh(self):
@@ -41,7 +41,8 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         """
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
         cutoff = (1 - x*x)*(1 - y*y)
-        return cutoff * (x*x + y*y) ** (0.5*self.alpha)
+        alpha = 1.01 - (2*(1-self.beta))/self.p_final
+        return cutoff * (x*x + y*y) ** (0.5*alpha)
 
     def const_rel_inverse(self, D):
         if float(self.delta) == 0:
@@ -69,7 +70,7 @@ class PowerLaw(NonlinearEllipticProblem_Su):
     def interpolate_initial_guess(self, z): # Just choose something non-zero...
         x, y = fd.SpatialCoordinate(z.ufl_domain())
         z.sub(0).interpolate(fd.as_vector([x-2, y+2]))
-        z.sub(1).interpolate((x+2)**2 * (2-x)**2 * (y+2)**2 * (2-y)**2)
+        z.sub(1).project((x+2)**2 * (2-x)**2 * (y+2)**2 * (2-y)**2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -78,7 +79,7 @@ if __name__ == "__main__":
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
     parser.add_argument("--no-shift", dest="no_shift", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
-    parser.add_argument("--alpha", type=float, default=1.01) # Measures how singular is the exact solution; default value should yield linear rate
+    parser.add_argument("--beta", type=float, default=1.0) # Expected rate of convergence
     parser.add_argument("--penalty", choices=["const_rel","plaw","quadratic","p-d"], default="p-d")
     parser.add_argument("--cr", default="thinning", choices=["newtonian","thinning","thickening"]) # Controls if p is larger or smaller than 2
     parser.add_argument("--p-s", type=int, default=1) # Larger = further away from Newtonian (0 = Newtonian)
@@ -87,7 +88,7 @@ if __name__ == "__main__":
 
     # Initialize values for the constitutive relation
     p = fd.Constant(2.0)
-    delta = fd.Constant(0.000)
+    delta = fd.Constant(0.001)
     max_shift = fd.Constant(0.)
 
     # Choose over which constitutive parameters we do continuation
@@ -105,9 +106,9 @@ if __name__ == "__main__":
         p_s = [2.0]
     else:
         p_s = possible_p_s[:(args.p_s+1)]
-    continuation_params = {"p": p_s}
+    continuation_params = {"p": p_s, "delta": [float(delta)]}
 
-    problem_ = PowerLaw(p=p, delta=delta, max_shift=max_shift, alpha=args.alpha, p_final=p_s[-1])
+    problem_ = PowerLaw(p=p, delta=delta, max_shift=max_shift, beta=args.beta, p_final=p_s[-1])
     solver_class = {"CG": ConformingSolver,
                     "CR": CrouzeixRaviartSolver,
                     "DG": DGSolver}[args.disc]

@@ -67,7 +67,7 @@ if __name__ == "__main__":
         possible_p_s = [2.0, 1.9, 1.8, 1.7, 1.6, 1.5]
         args.no_shift = True
     elif args.cr == "thickening":
-        possible_p_s = [2.0, 2.5, 3.0, 3.5, 4.0, 5.0]
+        possible_p_s = [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 4.75, 4.85, 4.9, 5.0]
     else:
         possible_p_s = [2.0]
         args.no_shift = True
