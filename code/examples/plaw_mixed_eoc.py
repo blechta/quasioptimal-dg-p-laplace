@@ -118,7 +118,7 @@ if __name__ == "__main__":
     h_s = []#[1./re for re in res]
 
     # To store the errors
-    errors = {"F*_flux": [], "F_potential": [], "modular": [], "Lp'_flux": [], "Lp_potential": []}
+    errors = {"F*_flux": [], "F_potential": [], "modular": [], "Lp'_flux": [], "Lp_potential": [], "total": []}
 
     for nref in range(1, len(res)+1):
         solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing, no_shift=args.no_shift)
@@ -146,9 +146,11 @@ if __name__ == "__main__":
         errors["F*_flux"].append(natural_distance_S)
         if args.disc == "CG":
             errors["modular"].append(np.nan)
+            total_error = 0.0
         else:
             modular = solver_.modular(u)
             errors["modular"].append(modular)
+            total_error = modular
         if u_exact is not None:
             Lp_error_u = fd.assemble(fd.inner(u-u_exact, u-u_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
         else:
@@ -157,18 +159,16 @@ if __name__ == "__main__":
         p_prime_ = p_s[-1]/(p_s[-1]-1.)
         Lp_error_S = fd.assemble(fd.inner(S-S_exact, S-S_exact)**(p_prime_/2.) * fd.dx)**(1/p_prime_)
         errors["Lp'_flux"].append(Lp_error_S)
+        total_error += natural_distance_S + natural_distance_u
+        errors["total"].append(total_error)
 
 
     convergence_rates = {err_type: compute_rates(errors[err_type], res)
-                         for err_type in ["F*_flux", "F_potential", "modular", "Lp'_flux", "Lp_potential"]}
+                         for err_type in ["F*_flux", "F_potential", "modular", "Lp'_flux", "Lp_potential", "total"]}
 
     print("Mesh sizes (h_max, h_avg): ", h_s)
     print("Computed errors: ")
     pprint.pprint(errors)
     print("Computed rates: ")
     pprint.pprint(convergence_rates)
-
-    # Test
-#    fd.File("test.pvd").write(S, fd.Function(fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)).interpolate(S_exact))
-#    fd.File("test1.pvd").write(fd.project(Du, fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)), fd.interpolate(Du_exact, fd.VectorFunctionSpace(solver_.z.ufl_domain(), "DG", 1)))
-#    fd.File("test1.pvd").write(u, fd.Function(fd.FunctionSpace(solver_.z.ufl_domain(), "DG", 1)).interpolate(u_exact))
+    print("Average EOC:   ", sum(convergence_rates["total"])/len(convergence_rates["total"]))

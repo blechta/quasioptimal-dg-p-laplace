@@ -34,7 +34,10 @@ class PowerLaw(NonlinearEllipticProblem):
     def rhs(self, v):
         sols = self.exact_solution(v.function_space())
         S = self.const_rel(fd.grad(sols))
-        L = - fd.div(S) * v * fd.dx
+#        L = - fd.div(S) * v * fd.dx
+#        L = - fd.div(S) * v * fd.dx(degree=8)
+#        L = fd.inner(S, fd.grad(v)) * fd.dx   # I suspect in general we need this form... (but note this makes sense only with smoothing)
+        L = fd.inner(S, fd.grad(v)) * fd.dx(degree=8)
         return L
 
     def interpolate_initial_guess(self, z):
@@ -93,7 +96,7 @@ if __name__ == "__main__":
     h_s = []#[1./re for re in res]
 
     # To store the errors
-    errors = {"F": [], "modular": [], "Lp": []}
+    errors = {"F": [], "modular": [], "Lp": [], "total": []}
 
     for nref in range(1, len(res)+1):
         solver_kwargs = {"nref": nref, "smoothing": args.smoothing, "no_shift": args.no_shift}
@@ -116,18 +119,23 @@ if __name__ == "__main__":
         errors["F"].append(natural_distance)
         if args.disc == "CG":
             errors["modular"].append(np.nan)
+            total_error = 0.0
         else:
             modular = solver_.modular(u)
             errors["modular"].append(modular)
+            total_error = modular
         Lp_error = fd.assemble(fd.inner(u-u_exact, u-u_exact)**(p_s[-1]/2.) * fd.dx)**(1/p_s[-1])
         errors["Lp"].append(Lp_error)
+        total_error += natural_distance
+        errors["total"].append(total_error)
 
 
     convergence_rates = {err_type: compute_rates(errors[err_type], res)
-                         for err_type in ["F", "modular", "Lp"]}
+                         for err_type in ["F", "modular", "Lp", "total"]}
 
     print("Mesh sizes (h_max, h_avg): ", h_s)
     print("Computed errors: ")
     pprint.pprint(errors)
     print("Computed rates: ")
     pprint.pprint(convergence_rates)
+    print("Average EOC:   ", sum(convergence_rates["total"])/len(convergence_rates["total"]))
