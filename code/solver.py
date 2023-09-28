@@ -40,6 +40,12 @@ class NonlinearEllipticProblem_Su(NonlinearEllipticProblem):
         #For now we only do homogeneous BCs
         return fd.DirichletBC(Z.sub(1), fd.Constant(0.), "on_boundary")
 
+class NonlinearEllipticProblem_Ru(NonlinearEllipticProblem_Su):
+    """Problem Class for the primal LDG formulation"""
+    def __init__(self, **const_rel_params):
+        super().__init__(**const_rel_params)
+        self.formulation = "R-u"
+
 class NonlinearEllipticSolver(object):
 
     def function_space(self, mesh, k=1): raise NotImplementedError
@@ -53,6 +59,7 @@ class NonlinearEllipticSolver(object):
         self.no_shift = no_shift
         self.formulation_u = (self.problem.formulation == "u")
         self.formulation_Su = (self.problem.formulation == "S-u")
+        self.formulation_Ru = (self.problem.formulation == "R-u")
         self.k = k
 
         mh = problem.mesh_hierarchy(self.nref)
@@ -161,7 +168,7 @@ class NonlinearEllipticSolver(object):
         # Compute the max shift
         if self.formulation_u:
             u = self.z
-        elif self.formulation_Su:
+        elif self.formulation_Su or self.formulation_Ru:
             _, u = self.z.subfunctions
         grad_u_squared = self._dg2km1_aux_fun
         grad_u_squared.project(fd.inner(fd.grad(u), fd.grad(u)))
@@ -206,15 +213,15 @@ class NonlinearEllipticSolver(object):
         dx = fd.dx(degree=quad_degree)
         return (fd.assemble(fd.inner(F_, F_) * dx))**0.5
 
-    def W1pnorm(self, z, p):
-        if self.formulation_u:
-            return fd.assemble(fd.inner(fd.grad(z), fd.grad(z))**(p/2.) * fd.dx)**(1/p)
-        elif self.formulation_Su:
-            p_prime = p/(p-1.)
-            (S, u) = z.split()
-            S_norm = fd.assemble(fd.inner(S, S)**(p_prime/2.) * fd.dx)**(1/p_prime)
-            u_norm = fd.assemble(fd.inner(fd.grad(u), fd.grad(u))**(p/2.) * fd.dx)**(1/p)
-            return S_norm + u_norm
+#    def W1pnorm(self, z, p):
+#        if self.formulation_u:
+#            return fd.assemble(fd.inner(fd.grad(z), fd.grad(z))**(p/2.) * fd.dx)**(1/p)
+#        elif self.formulation_Su:
+#            p_prime = p/(p-1.)
+#            (S, u) = z.split()
+#            S_norm = fd.assemble(fd.inner(S, S)**(p_prime/2.) * fd.dx)**(1/p_prime)
+#            u_norm = fd.assemble(fd.inner(fd.grad(u), fd.grad(u))**(p/2.) * fd.dx)**(1/p)
+#            return S_norm + u_norm
 
     def get_parameters(self):
         #LU for now I guess...
@@ -415,33 +422,33 @@ class DGSolver(CrouzeixRaviartSolver):
             raise NotImplementedError
         return F
 
-    def W1pnorm(self, z, p):
-
-        # For the DG terms
-        alpha = 10. * self.k**2
-        n = fd.FacetNormal(self.Z.ufl_domain())
-        h = fd.CellDiameter(self.Z.ufl_domain())
-        if self.formulation_u:
-            U_jmp = 2. * fd.avg(fd.outer(z,n))
-            U_jmp_bdry = fd.outer(z, n)
-            jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
-            jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
-            broken_W1p = fd.assemble(fd.inner(fd.grad(z), fd.grad(z))**(p/2.) * fd.dx)
-            jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
-            jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
-            return (broken_W1p + jumps)**(1/p)
-        elif self.formulation_Su:
-            (S, u) = z.split()
-            U_jmp = 2. * fd.avg(fd.outer(u,n))
-            U_jmp_bdry = fd.outer(u, n)
-            jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
-            jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
-            p_prime = p/(p-1.)
-            S_norm = fd.assemble(fd.inner(S, S)**(p_prime/2.) * fd.dx)**(1/p_prime)
-            broken_W1p = fd.assemble(fd.inner(fd.grad(u), fd.grad(u))**(p/2.) * fd.dx)
-            jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(z)) *fd.dS)
-            jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, z) * fd.ds)
-            return S_norm + (broken_W1p + jumps)**(1/p)
+#    def W1pnorm(self, z, p):
+#
+#        # For the DG terms
+#        alpha = 10. * self.k**2
+#        n = fd.FacetNormal(self.Z.ufl_domain())
+#        h = fd.CellDiameter(self.Z.ufl_domain())
+#        if self.formulation_u:
+#            U_jmp = 2. * fd.avg(fd.outer(z,n))
+#            U_jmp_bdry = fd.outer(z, n)
+#            jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
+#            jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
+#            broken_W1p = fd.assemble(fd.inner(fd.grad(z), fd.grad(z))**(p/2.) * fd.dx)
+#            jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
+#            jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
+#            return (broken_W1p + jumps)**(1/p)
+#        elif self.formulation_Su:
+#            (S, u) = z.split()
+#            U_jmp = 2. * fd.avg(fd.outer(u,n))
+#            U_jmp_bdry = fd.outer(u, n)
+#            jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
+#            jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
+#            p_prime = p/(p-1.)
+#            S_norm = fd.assemble(fd.inner(S, S)**(p_prime/2.) * fd.dx)**(1/p_prime)
+#            broken_W1p = fd.assemble(fd.inner(fd.grad(u), fd.grad(u))**(p/2.) * fd.dx)
+#            jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(z)) *fd.dS)
+#            jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, z) * fd.ds)
+#            return S_norm + (broken_W1p + jumps)**(1/p)
 
 
 def _split_rhs(rhs):
