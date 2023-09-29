@@ -33,21 +33,38 @@ class PowerLaw(NonlinearEllipticProblem):
 
     def rhs(self, v):
         sols = self.exact_solution(v.function_space())
-        S = self.const_rel(fd.grad(sols))
-#        L = - fd.div(S) * v * fd.dx
-#        L = - fd.div(S) * v * fd.dx(degree=8)
-#        L = fd.inner(S, fd.grad(v)) * fd.dx   # I suspect in general we need this form... (but note this makes sense only with smoothing)
-        L = fd.inner(S, fd.grad(v)) * fd.dx(degree=8)
+        S_ = self.const_rel(fd.grad(sols))
+        L = - fd.div(S_) * v * fd.dx
+#        L = - fd.div(S_) * v * fd.dx(degree=8)
+#        L = fd.inner(S_, fd.grad(v)) * fd.dx   # I suspect in general we need this form... (but note this makes sense only with smoothing)
+#        L = fd.inner(S_, fd.grad(v)) * fd.dx(degree=8)
         return L
 
     def interpolate_initial_guess(self, z):
         x, y = fd.SpatialCoordinate(z.ufl_domain())
         z.interpolate((x+1)**2 * (1-x)**2 * (y+1)**2 * (1-y)**2)
 
+
+class PowerLawLDG(PowerLaw):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.formulation = "R-u"
+
+    def bcs(self, Z):
+        return fd.DirichletBC(Z.sub(1), fd.Constant(0.), "on_boundary")
+
+    def rhs(self, z_):
+        sols = self.exact_solution(z_.function_space())
+        S_ = self.const_rel(fd.grad(sols))
+        _, v = fd.split(z_)
+        L = - fd.div(S_) * v * fd.dx
+        return L
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=""" Primal Formulation""")
-    parser.add_argument("--disc", choices=["CR","CG","DG"], default="CG")
+    parser.add_argument("--disc", choices=["CR","CG","DG","LDG"], default="CG")
     parser.add_argument("--smoothing", dest="smoothing", default=False, action="store_true")
     parser.add_argument("--no-shift", dest="no_shift", default=False, action="store_true")
     parser.add_argument("--nrefs", type=int, default=6)
@@ -82,12 +99,15 @@ if __name__ == "__main__":
     continuation_params = {"p": p_s}
 
 
-    problem_ = PowerLaw(p=p, delta=delta, K=K, max_shift=max_shift, p_final=p_s[-1], beta=args.beta)
+    problem_class = {"DG": PowerLaw,
+                     "LDG": PowerLawLDG}[args.disc]
+    problem_ = problem_class(p=p, delta=delta, K=K, max_shift=max_shift, p_final=p_s[-1], beta=args.beta)
     solver_class = {"CG": ConformingSolver,
                     "CR": CrouzeixRaviartSolver,
-                    "DG": DGSolver}[args.disc]
+                    "DG": DGSolver,
+                    "LDG": DGSolver}[args.disc]
     solver_args = {"nref": args.nrefs, "smoothing": args.smoothing}
-    if args.disc in ["CR","DG"]: solver_args["penalty_form"] = args.penalty
+    if args.disc in ["CR","DG", "LDG"]: solver_args["penalty_form"] = args.penalty
     if args.disc == "CG": args.no_shift = True
 
 
@@ -105,7 +125,10 @@ if __name__ == "__main__":
         if (np.abs(float(delta)) < 1e-10): problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
-        u = solver_.z
+        if args.disc == "LDG":
+            R, u = solver_.z.subfunctions
+        else:
+            u = solver_.z
 
         u_exact = problem_.exact_solution(solver_.Z)
 
@@ -115,7 +138,10 @@ if __name__ == "__main__":
             h_s.append((w.max()[1], w.sum()/w.getSize()))
 
         # Compute errors
-        natural_distance = solver_.natural_F(w_1=fd.grad(u), w_2=fd.grad(u_exact))
+        if args.disc == "LDG":
+            natural_distance = solver_.natural_F(w_1=fd.grad(u)+R, w_2=fd.grad(u_exact))
+        else:
+            natural_distance = solver_.natural_F(w_1=fd.grad(u), w_2=fd.grad(u_exact))
         errors["F"].append(natural_distance)
         if args.disc == "CG":
             errors["modular"].append(np.nan)

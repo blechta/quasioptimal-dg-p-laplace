@@ -137,7 +137,7 @@ class NonlinearEllipticSolver(object):
                 rhs = self.problem.rhs
                 b = fd.Function(self.Z)
                 b1 = b
-            elif self.formulation_Su:
+            elif self.formulation_Su or self.formulation_Ru:
                 op = SmoothingOpVeeserZanotti(self.Z[1])
                 rhs = _split_rhs(self.problem.rhs)
                 b = fd.Function(self.Z)
@@ -188,7 +188,8 @@ class NonlinearEllipticSolver(object):
         if self.problem.formulation == "u":
             fields["u"] = z
             fields["v"] = z_
-        elif self.problem.formulation == "S-u":
+        elif self.formulation_Su or self.formulation_Ru:
+            # For the Ru formulation, "S" is the lifting of the jumps, not the stress
             (S, u) = fd.split(z)
             (T, v) = fd.split(z_)
             fields["u"] = u
@@ -365,7 +366,7 @@ class DGSolver(CrouzeixRaviartSolver):
     def function_space(self, mesh, k):
         if self.formulation_u:
             return fd.FunctionSpace(mesh, "DG", k)
-        elif self.formulation_Su:
+        elif self.formulation_Su or self.formulation_Ru:
             eleu = fd.FiniteElement("DG", mesh.ufl_cell(), k)
             eleS = fd.VectorElement("DG", mesh.ufl_cell(), k-1)
             return fd.FunctionSpace(mesh, fd.MixedElement([eleS, eleu]))
@@ -395,12 +396,26 @@ class DGSolver(CrouzeixRaviartSolver):
             G = self.problem.const_rel(fd.grad(u))
         elif self.formulation_Su:
             G = self.problem.const_rel(S)
+        elif self.formulation_Ru:
+            G = self.problem.const_rel(fd.grad(u)+S)
         else:
             raise NotImplementedError
 
         if self.formulation_u:
             F = (
-                fd.inner(G, fd.grad(v)) * fd.dx # TODO: Need a different formulation for LDG
+                fd.inner(G, fd.grad(v)) * fd.dx
+                - fd.inner(fd.avg(G), 2*fd.avg(fd.outer(v, n))) * fd.dS
+                - fd.inner(G, fd.outer(v, n)) * fd.ds
+                + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS
+                + alpha * fd.inner(jmp_penalty_bdry, fd.outer(v,n)) * fd.ds
+            )
+        elif self.formulation_Ru:
+            # "S" represents here the lifting of the jumps of u
+            F = (
+                fd.inner(S, T) * fd.dx
+                + fd.inner(2*fd.avg(fd.outer(u, n)), fd.avg(T)) * fd.dS
+                + fd.inner(fd.outer(u, n), T) * fd.ds
+                + fd.inner(G, fd.grad(v)) * fd.dx
                 - fd.inner(fd.avg(G), 2*fd.avg(fd.outer(v, n))) * fd.dS
                 - fd.inner(G, fd.outer(v, n)) * fd.ds
                 + alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(v, n))) * fd.dS

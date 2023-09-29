@@ -4,6 +4,8 @@ pre_primal:
 	mkdir -p output/primal/
 pre_mixed:
 	mkdir -p output/mixed/
+pre_test:
+	mkdir -p output/tests/
 
 square.msh: square.geo
 	gmsh -2 -clscale 0.3 square.geo -smooth 3
@@ -64,6 +66,14 @@ mixed_dg: pre_mixed square.msh
 		$(exec) plaw_mixed_eoc.py --disc DG --nrefs 5 --cr thickening --p-s $$num --beta 0.5 2>&1 --smoothing | tee "output/mixed/DG_rate_0.5_p--'$$num'_thickening_nref_5_smoothing.log" ;\
 #		$(exec) plaw_mixed_eoc.py --disc DG --nrefs 5 --cr thickening --p-s $$num --beta 0.5 2>&1 --smoothing --no-shift | tee "output/mixed/DG_rate_0.5_p--'$$num'_thickening_nref_5_smoothing_no-shift.log" ;\
 	done
+
+test_primal: pre_test
+	$(exec) plaw_eoc.py --disc DG --nrefs 6 --cr newtonian --beta 0.25 2>&1 | tee output/tests/primalDG_nref_6_beta_0.25_newtonian.log
+	$(exec) plaw_eoc.py --disc DG --nrefs 6 --cr newtonian --beta 0.25 --smoothing 2>&1 | tee output/tests/primalDG_nref_6_beta_0.25_newtonian_smoothing.log
+	$(exec) plaw_eoc.py --disc DG --nrefs 6 --cr thinning -p-s 1 --beta 0.25 2>&1 | tee output/tests/primalDG_nref_6_beta_0.25_thinning.log
+	$(exec) plaw_eoc.py --disc DG --nrefs 6 --cr thinning -p-s 1 --beta 0.25 --smoothing 2>&1 | tee output/tests/primalDG_nref_6_beta_0.25_thinning_smoothing.log
+	$(exec) plaw_eoc.py --disc DG --nrefs 6 --cr thickening -p-s 1 --beta 0.25 2>&1 | tee output/tests/primalDG_nref_6_beta_0.25_thickening.log
+	$(exec) plaw_eoc.py --disc DG --nrefs 6 --cr thickening -p-s 1 --beta 0.25 --smoothing 2>&1 | tee output/tests/primalDG_nref_6_beta_0.25_thickening_smoothing.log
 
 primal: primal_cg primal_cr primal_dg
 
