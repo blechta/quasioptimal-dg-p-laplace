@@ -20,7 +20,8 @@ class PowerLaw(NonlinearEllipticProblem):
         self.p_final = p_final
 
     def mesh(self):
-        return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square.msh")
+#        return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square.msh")
+        return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square_str.msh")
 
     def const_rel(self, D):
         return self.K * (self.delta + fd.inner(D, D)) ** (0.5*self.p-1) * D
@@ -34,9 +35,9 @@ class PowerLaw(NonlinearEllipticProblem):
     def rhs(self, v):
         sols = self.exact_solution(v.function_space())
         S_ = self.const_rel(fd.grad(sols))
-        L = - fd.div(S_) * v * fd.dx
+#        L = - fd.div(S_) * v * fd.dx
 #        L = - fd.div(S_) * v * fd.dx(degree=8)
-#        L = fd.inner(S_, fd.grad(v)) * fd.dx   # I suspect in general we need this form... (but note this makes sense only with smoothing)
+        L = fd.inner(S_, fd.grad(v)) * fd.dx   # I suspect in general we need this form... (but note this makes sense only with smoothing)
 #        L = fd.inner(S_, fd.grad(v)) * fd.dx(degree=8)
         return L
 
@@ -57,7 +58,9 @@ class PowerLawLDG(PowerLaw):
         sols = self.exact_solution(z_.function_space())
         S_ = self.const_rel(fd.grad(sols))
         _, v = fd.split(z_)
-        L = - fd.div(S_) * v * fd.dx
+#        L = - fd.div(S_) * v * fd.dx
+        L = fd.inner(S_, fd.grad(v)) * fd.dx   # I suspect in general we need this form... (but note this makes sense only with smoothing)
+#        L = fd.inner(S_, fd.grad(v)) * fd.dx(degree=8)
         return L
 
 
@@ -87,7 +90,7 @@ if __name__ == "__main__":
         possible_p_s = [2.0, 1.9, 1.8, 1.7, 1.6, 1.5]
         args.no_shift = True
     elif args.cr == "thickening":
-        possible_p_s = [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 4.75, 4.85, 4.9, 5.0]
+        possible_p_s = [2.0, 2.5, 3.0, 3.5, 4.0, 4.5]#, 4.75, 4.85, 4.9, 5.0]
     else:
         possible_p_s = [2.0]
         args.no_shift = True
@@ -100,6 +103,8 @@ if __name__ == "__main__":
 
 
     problem_class = {"DG": PowerLaw,
+                     "CG": PowerLaw,
+                     "CR": PowerLaw,
                      "LDG": PowerLawLDG}[args.disc]
     problem_ = problem_class(p=p, delta=delta, K=K, max_shift=max_shift, p_final=p_s[-1], beta=args.beta)
     solver_class = {"CG": ConformingSolver,
