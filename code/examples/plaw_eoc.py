@@ -63,6 +63,11 @@ class PowerLawLDG(PowerLaw):
 #        L = fd.inner(S_, fd.grad(v)) * fd.dx(degree=8)
         return L
 
+    def interpolate_initial_guess(self, z):
+        x, y = fd.SpatialCoordinate(z.ufl_domain())
+        z.sub(0).interpolate(fd.as_vector([x-2, y+2]))
+        z.sub(1).project((x+2)**2 * (2-x)**2 * (y+2)**2 * (2-y)**2)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -127,7 +132,7 @@ if __name__ == "__main__":
         solver_kwargs = {"nref": nref, "smoothing": args.smoothing, "no_shift": args.no_shift}
         solver_ = solver_class(problem_, **solver_kwargs)
 
-        if (np.abs(float(delta)) < 1e-10): problem_.interpolate_initial_guess(solver_.z)
+        if (np.abs(float(delta)) < 1e-10) or (args.disc == "LDG"): problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
         if args.disc == "LDG":
