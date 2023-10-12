@@ -23,7 +23,6 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         self.p_final = p_final
 
     def mesh(self):
-#        return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square.msh")
         return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square_str.msh")
 
     def const_rel(self, S):
@@ -65,9 +64,8 @@ class PowerLaw(NonlinearEllipticProblem_Su):
     def rhs(self, z_):
         S_exact = self.exact_flux(z_.function_space())
         _, v = fd.split(z_)
-#        L = - fd.div(S_exact) * v * fd.dx
+#        L = - fd.div(S_exact) * v * fd.dx   # This one makes sense only if S_exact is regular enough
         L = fd.inner(S_exact, fd.grad(v)) * fd.dx   # I suspect in general we need this form... (but note this makes sense only with smoothing)
-#        L = fd.inner(S_, fd.grad(v)) * fd.dx(degree=8)
         return L
 
     def interpolate_initial_guess(self, z): # Just choose something non-zero...
@@ -97,10 +95,10 @@ if __name__ == "__main__":
     # Choose over which constitutive parameters we do continuation
     # First all the possibilities for p:
     if args.cr == "thinning":
-        possible_p_s = [2.0, 1.9, 1.8, 1.7, 1.6, 1.5]
+        possible_p_s = [2.0, 1.9, 1.7, 1.6, 1.5]
         args.no_shift = True
     elif args.cr == "thickening":
-        possible_p_s = [2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
+        possible_p_s = [2.0, 2.5, 3.0, 4.0, 4.5]
     else:
         possible_p_s = [2.0]
         args.no_shift = True
