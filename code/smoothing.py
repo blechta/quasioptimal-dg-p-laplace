@@ -88,8 +88,8 @@ class SmoothingOpVeeserZanotti(SmoothingOpBase):
         P1, FB = self.spaces
         f1 = getattr(self, 'f1', None)
         f2 = getattr(self, 'f2', None)
-        self.f1 = f1 = assemble(rhs(TestFunction(P1)), tensor=f1).vector()
-        self.f2 = f2 = assemble(rhs(TestFunction(FB)), tensor=f2).vector()
+        self.f1 = f1 = assemble(rhs(TestFunction(P1)), tensor=f1)
+        self.f2 = f2 = assemble(rhs(TestFunction(FB)), tensor=f2)
         return f1, f2
 
     def apply(self, rhs, result=None):
