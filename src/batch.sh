@@ -10,5 +10,5 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=blechta@karlin.mff.cuni.cz
 
-cd /usr/work/blechta/dev/paper-smoothing-op/code
+cd /usr/work/blechta/dev/paper-smoothing-op/src
 udocker run -v $PWD:/mnt quasioptimal bash /mnt/script.sh

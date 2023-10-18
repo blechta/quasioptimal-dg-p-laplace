@@ -3,11 +3,10 @@ import numpy as np
 
 import argparse
 import pprint
-import sys
 import os
-sys.path.append('..')
 
 from solver import NonlinearEllipticProblem_Su, ConformingSolver, CrouzeixRaviartSolver, DGSolver
+
 
 def compute_rates(errors, res):
     return [np.log(errors[i]/errors[i+1])/np.log(res[i+1]/res[i])

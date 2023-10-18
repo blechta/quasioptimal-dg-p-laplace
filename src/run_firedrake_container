@@ -39,7 +39,6 @@ read -r -d '' USAGE <<EOF || true
 echo "${BLUE}Run 'pip install pdbpp' to get a nice debugger${RESET}"
 echo "${BLUE}${RESET}"
 echo "${BLUE}Quick start:${RESET}"
-echo "${BLUE}  cd examples/${RESET}"
 echo "${BLUE}  python plaw_eoc.py${RESET}"
 echo "${BLUE}${RESET}"
 EOF

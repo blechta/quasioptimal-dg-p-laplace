@@ -10,7 +10,3 @@
 *.run.xml
 *.thm
 *.toc
-
-*.pvd
-*.vtu
-__pycache__/
