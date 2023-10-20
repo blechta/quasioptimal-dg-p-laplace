@@ -22,7 +22,7 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         self.p_final = p_final
 
     def mesh(self):
-        return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square_str.msh")
+        return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square2.msh")
 
     def const_rel(self, S):
         return (self.delta**(self.p-1) + fd.inner(S,S)) ** (0.5*(self.p/(self.p-1)) - 1) * S

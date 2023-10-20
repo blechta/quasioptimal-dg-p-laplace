@@ -7,9 +7,6 @@ RESET=$(tput sgr 0)
 # Select image
 IMAGE="firedrakeproject/firedrake:2023-10"
 
-# Directory where this script resides
-THISDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
 # Mount point in the container
 CONTAINER_MOUNT_POINT="/home/firedrake/shared"
 
@@ -23,7 +20,7 @@ else
 fi
 DOCKER_RUN_CMD+=(
     --rm
-    --volume="${THISDIR}":${CONTAINER_MOUNT_POINT}
+    --volume="${PWD}":${CONTAINER_MOUNT_POINT}
     --env=DISPLAY=${DISPLAY}
     --volume=/tmp/.X11-unix:/tmp/.X11-unix
     --device=/dev/dri
@@ -39,6 +36,7 @@ read -r -d '' USAGE <<EOF || true
 echo "${BLUE}Run 'pip install pdbpp' to get a nice debugger${RESET}"
 echo "${BLUE}${RESET}"
 echo "${BLUE}Quick start:${RESET}"
+echo "${BLUE}  cd src/${RESET}"
 echo "${BLUE}  python plaw_eoc.py${RESET}"
 echo "${BLUE}${RESET}"
 EOF
