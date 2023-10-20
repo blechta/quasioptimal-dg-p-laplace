@@ -2,7 +2,7 @@
 #
 #SBATCH --job-name=paper-quasioptimal
 #SBATCH --output=paper-quasioptimal.log
-#SBATCH -n 32
+#SBATCH -n 12
 #SBATCH --time=12:00:00
 #SBATCH -p express3
 #SBATCH -w r40
@@ -11,7 +11,7 @@
 
 set -e
 
-NPROC=30
+NPROC=12
 CONTAINER=quasioptimal
 CMD="source ~/firedrake/bin/activate; make -j $NPROC"
 
