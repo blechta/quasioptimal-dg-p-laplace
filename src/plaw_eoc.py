@@ -117,13 +117,13 @@ if __name__ == "__main__":
 
 
     # Choose resolutions
-    res = [2**i for i in range(2,args.nrefs+2)]
+    res = [2**i for i in range(1, args.nrefs+2)]
     h_s = []
 
     # To store the errors
     errors = {"F": [], "modular": [], "Lp": [], "total": []}
 
-    for nref in range(1, len(res)+1):
+    for nref in range(len(res)):
         solver_kwargs = {"nref": nref, "smoothing": args.smoothing, "no_shift": args.no_shift}
         solver_ = solver_class(problem_, **solver_kwargs)
 

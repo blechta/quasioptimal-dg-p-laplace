@@ -114,13 +114,13 @@ if __name__ == "__main__":
                     "DG": DGSolver}[args.disc]
 
     # Choose resolutions
-    res = [2**i for i in range(2,args.nrefs+2)]
+    res = [2**i for i in range(1, args.nrefs+2)]
     h_s = []#[1./re for re in res]
 
     # To store the errors
     errors = {"F*_flux": [], "F_potential": [], "modular": [], "Lp'_flux": [], "Lp_potential": [], "total": []}
 
-    for nref in range(1, len(res)+1):
+    for nref in range(len(res)):
         solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing, no_shift=args.no_shift)
 
         if (np.abs(float(delta**(p_s[-1]-1))) < 1e-12):
@@ -134,6 +134,11 @@ if __name__ == "__main__":
         S_exact = problem_.exact_flux(solver_.Z)
         Du_exact = problem_.const_rel(S_exact)
         u_exact = problem_.exact_potential(solver_.Z)
+
+        # Compute current mesh size
+        h = fd.Function(fd.FunctionSpace(solver_.z.ufl_domain(), "DG", 0)).interpolate(fd.CellSize(solver_.z.ufl_domain()))
+        with h.dat.vec_ro as w:
+            h_s.append((w.max()[1], w.sum()/w.getSize()))
 
         # Compute errors
         quad_degree = 4
