@@ -3,6 +3,7 @@
 *.pdf
 *.pvd
 *.vtu
+*.tex
 __pycache__/
 
 /.bash_history
