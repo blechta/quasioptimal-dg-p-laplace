@@ -10,3 +10,5 @@
 *.run.xml
 *.thm
 *.toc
+
+/siamart*.cls
