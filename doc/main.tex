@@ -1,59 +1,22 @@
-\pdfoutput=1
-\tracingoutput1
-\tracingpages0
-
-\PassOptionsToPackage{compress}{cleveref}
-\documentclass[review,onefignum,onetabnum,onealgnum]{siamart220329}
-
+\documentclass[oneeqnum]{siamart220329}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-
-\usepackage{todonotes}
-\usepackage{csquotes}
-
-% Typesetting math
-\usepackage{amssymb}
-\usepackage{amsfonts}
 \usepackage{mathtools}
 
-% Setup for cleveref
-\newcommand{\crefrangeconjunction}{--}
-\newcommand{\creflastconjunction}{, and~}
-\crefmultiformat{subequation}%
-  {\edef\crefstripprefixinfo{#1}\textup{(#2#1#3}}%
-  {, \textup{#2\crefstripprefix{\crefstripprefixinfo}{#1}#3)}}%
-  {, \textup{#2\crefstripprefix{\crefstripprefixinfo}{#1}#3}}%
-  {, and~\textup{#2\crefstripprefix{\crefstripprefixinfo}{#1}#3)}}
+\newcommand*{\ldblbrace}{\{\mskip-5mu\{}
+\newcommand*{\rdblbrace}{\}\mskip-5mu\}}
 
-% Nicer kerning of footenotemarks and punctuation
-\usepackage{fnpct}
-
-% Our custom macros
-\DeclarePairedDelimiter\norm{\|}{\|}
-\DeclarePairedDelimiter\snorm{\lvert}{\rvert}
-\makeatletter
-\newcommand\doraisetag[1]{\global\shifttag@true\raisetag{#1}}
-\makeatother
-\usepackage{macros-private}
-\input{amslinenopatch}
-
-% Title, author
+\protected\def\mathp{$p$}
 \title{%
-  Smoothing operator for quasi-optimal nonconforming methods\thanks{%
-    Submitted to the editors DATE.
-  }
+  Technical report: Supporting software for article
+  ``Quasi-optimal Discontinuous Galerkin discretisations of the \mathp-Dirichlet problem''
 }
 \author{%
-    Jan Blechta\thanks{%
-    Department of Mathematics, Chemnitz University of Technology, Chemnitz, 09126 Germany
-    (\email{jan.blechta@math.tu-chemnitz.de}).}
+    Jan Blechta\thanks{\email{blechta@karlin.mff.cuni.cz}}
     \and
-    Alexei Gazca\thanks{%
-    University of Freiburg, Germany
-    (\email{alexei.gazca@mathematik.uni-freiburg.de}).}
+    Alexei Gazca\thanks{\email{alexei.gazca@mathematik.uni-freiburg.de}}
 }
-\headers{<short title>}
-        {J.~Blechta, A.~Gazca}
+\headers{Quasi-optimal DG}{J.~Blechta, A.~Gazca}
 
 
 \begin{document}
@@ -61,66 +24,180 @@
 
 
 \begin{abstract}
-  We discuss implementation of the smoothing operator
-  by \cite{veeser-zanotti-iii}.
+  We discuss \href{https://github.com/blechta/quasioptimal-dg-p-laplace}{an
+  implementation} of the smoothing operator from
+  \cite{veeser-zanotti-ii,veeser-zanotti-iii}.
 \end{abstract}
 
 
 \begin{keywords}
-  keyword1, keyword2, keyword3
+  smoothing operator, quasi-optimal, DG, $p$-Laplace
 \end{keywords}
 
 
-\begin{MSCcodes}
-\end{MSCcodes}
+%\begin{MSCcodes}
+%\end{MSCcodes}
 
 
 \tableofcontents
 
 
-\section{The lowest-order case on triangles}
+\section{Notation}
 %
-We consider the action of operator $E_p$ from \cite{veeser-zanotti-iii}
-for the lowest-order case~$p=1$:
+We consider the action of operator $E_p = A_p - B_p(\operatorname{Id}{}-A_p)$ from
+\cite{veeser-zanotti-ii,veeser-zanotti-iii} for the lowest-order case~$p=1$
+on triangles:
 %
 \begin{align*}
-  \langle f, E_1 v \rangle
-  & = \langle f, A_1 v \rangle + \langle f, B_1 (v - A_1 v) \rangle \\
-  & = \sum_{z\in\mathcal{L}^{\mathrm{int}}_1} v|_{K_z}(z) \, \langle f, \varphi^1_z \rangle
-    + \sum_{F\in F^{\mathrm{int}}} \Bigl( \int_F \ldblbrace v \rdblbrace - \sum_{z\in\mathcal{L}^F_1} v|_{K_z}(z) \, \int_F \varphi_z^1 \Bigr) \langle f, \hat\varphi_F \rangle,
+  E_1 v
+  & = A_1 v + B_1 (v - A_1 v) \\
+  & = \sum_{z\in\mathcal{L}^{\mathrm{int}}_1} v|_{K_z}(z) \, \varphi^1_z
+    + \sum_{F\in \mathcal{F}^{\mathrm{int}}} \Bigl( \int_F \ldblbrace v
+        \rdblbrace - \sum_{z\in\mathcal{L}^F_1} v|_{K_z}(z) \, \int_F \varphi_z^1
+        \Bigr) \, \hat\varphi_F,
 \end{align*}
-where $\hat\varphi_F$ is the facet bubble normalized as $\int_{F'} \hat\varphi_F = \delta_{FF'}$,
-i.e., $\hat\varphi_F = \tfrac{6}{|F|} \varphi^1_{z_F^1} \varphi^1_{z_F^2}$ on triangles.
-Testing by a~Crouzeix--Raviart basis function $v\coloneqq \varphi^{\mathrm{CR}}_F$ we obtain
-\begin{multline*}
+%
+where $\mathcal{L}^{\mathrm{int}}_1$ are the interior nodes of the first-order
+Lagrange space (i.e., evalutation at internal vertices),
+$K_z$ is an arbitrary mesh element containing~$z$,
+$\varphi^1_z$ denote the first-order Lagrange basis function such that $\varphi^1_z(z')=\delta_{zz'}$ for mesh vertices $z$, $z'$,
+$\mathcal{F}^{\mathrm{int}}$ is the set of internal facets,
+$\ldblbrace\cdot\rdblbrace$ stands for facet average,
+$\mathcal{L}^F_1$ denotes the first-order Lagrange nodes on facet~$F$ (i.e., facet vertices),
+and
+$\hat\varphi_F$ is the facet bubble normalized as $\int_{F'} \hat\varphi_F = \delta_{FF'}$.
+
+The facet bubble can be represented as
+%
+\begin{equation}
+  \label{eq:facet_bubbles}
+  \hat\varphi_F
+  = \frac{6}{|F|} \varphi^1_{z_F^1} \varphi^1_{z_F^2}
+  = \frac{3}{2|F|} \varphi_F,
+\end{equation}
+%
+where $\varphi^1_{z_F^j}$, $j=1,2$, are the first-order Lagrange functions
+associated with facet vertices $z_F^1$, $z_F^2$, and $\varphi_F$ is the nodal
+facet bubble, i.e., $\varphi_F=1$ at the midpoint of~$F$.
+
+The above-defined $E_1$ has in its range only functions vanishing on the
+boundary and hence, in this formulation, it only applies to homogeneous
+Dirichlet problems. The same holds for this report and the reference
+implementation, which can be obtained at
+\url{https://github.com/blechta/quasioptimal-dg-p-laplace}.
+
+
+\section{Lowest-order Crouzeix--Raviart case}
+%
+A~linear functional $f$ assembled against smoothed Crouzeix--Raviart basis $E_1
+\varphi^{\mathrm{CR}}_F$, $F\in\mathcal{F}^{\mathrm{int}}$, can be expressed as
+a~linear combination of $\langle f, \varphi^1_z \rangle$,
+$z\in\mathcal{L}^{\mathrm{int}}_1$, and $\langle f, \varphi_F \rangle$,
+$F\in\mathcal{F}^{\mathrm{int}}$,
+%
+\begin{multline}
+  \label{eq:rhs_cr}
   \langle f, E_1 \varphi^{\mathrm{CR}}_F \rangle
   \\
-  = \sum_{z\in\mathcal{L}^{\mathrm{int}}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \langle f, \varphi^1_z \rangle
-  + \sum_{F'\in F^{\mathrm{int}}} \Bigl( \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace - \sum_{z\in\mathcal{L}^{F'}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \int_{F'} \varphi_z^1 \Bigr) \langle f, \hat\varphi_{F'} \rangle.
-\end{multline*}
-
+  = \sum_{z\in\mathcal{L}^{\mathrm{int}}_1} \varphi^{\mathrm{CR}}_F|_{K_z}(z)
+    \, \langle f, \varphi^1_z \rangle
+  + \sum_{F'\in \mathcal{F}^{\mathrm{int}}} \Bigl( \int_{F'} \ldblbrace
+    \varphi^{\mathrm{CR}}_F \rdblbrace - \sum_{z\in\mathcal{L}^{F'}_1}
+    \varphi^{\mathrm{CR}}_F|_{K_z}(z) \, \int_{F'} \varphi_z^1 \Bigr)
+    \, \langle f, \hat\varphi_{F'} \rangle.
+\end{multline}
+%
 We have
 %
-\begin{equation*}
-  \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace = \delta_{FF'} |F|,
-\end{equation*}
-%
-\begin{equation*}
+\begin{subequations}
+\begin{gather}
+  \label{eq:cr_1}
+  \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace = \delta_{FF'} |F|, \\
+  \label{eq:cr_2}
   \varphi^{\mathrm{CR}}_F|_{K_z}(z) = \begin{cases}
-    1  & \text{if $F\in\overline{K_z}$ and $z\in\overline{F}$,} \\
-    -1 & \text{if $F\in\overline{K_z}$ and $z$ is a~vertex adjacent to~$F$,} \\
-    0  & \text{if $F\notin\overline{K_z}$}
-  \end{cases}
-\end{equation*}
+    1  & \text{if $F\subset\overline{K_z}$ and $z\in\overline{F}$,} \\
+    -1 & \text{if $F\subset\overline{K_z}$ and $z$ is a~vertex adjacent to~$F$,} \\
+    0  & \text{otherwise,}
+  \end{cases} \\
+  \shortintertext{and}
+  \label{eq:cr_3}
+  \int_{F'} \varphi^1_z = \tfrac12 |F'| \quad \text{if $z\in\overline F'$.}
+\end{gather}
+\end{subequations}
 %
-and
+The first term in~\cref{eq:rhs_cr} results in the index sets and coefficients
+\texttt{coeffs1} computed in \texttt{SmoothingOpVeeserZanottiCR.coeffs()}.
+The second term gives \texttt{coeffs2}, where the coefficients \texttt{3/2},
+\texttt{$\pm$3/4} result from
+%
+\begin{alignat*}{2}
+  \int_{F'} \ldblbrace \varphi^{\mathrm{CR}}_F \rdblbrace
+  \, \langle f, \hat\varphi_{F'} \rangle
+  &= \frac32 \langle f, \varphi_{F'} \rangle
+  &\qquad& \text{if $F'=F\in\mathcal{F}^{\mathrm{int}}$,} \\
+  \int_{F'} \varphi_z^1
+  \, \langle f, \hat\varphi_{F'} \rangle
+  &= \frac34 \langle f, \varphi_{F'} \rangle
+  &\qquad& \text{if $F'\in\mathcal{F}^{\mathrm{int}}$ and
+                 $z\in\mathcal{L}^{F'}_1\cap\mathcal{L}^{\mathrm{int}}_1$,} \\
+\end{alignat*}
+%
+where we have used~\cref{eq:cr_1,eq:cr_3,eq:facet_bubbles}. Recall that
+Firedrake uses nodal bubbles $\varphi_F$ normalized to one at the facet
+midpoint.
+
+
+\section{Lowest-order DG case}
+%
+Consider DG basis members $\varphi_{K,z}$, for mesh element~$K$, and
+$z\in\mathcal{L}^{\mathrm{int}}_1$,
+%
+\begin{align}
+  \nonumber
+  \varphi_{K,z}|_{K'}(z') &= \begin{cases}
+    1 & \text{if $K=K'$, $z=z'$, and $z\in\mathcal{L}^{\mathrm{int}}_1$,} \\
+    0 & \text{otherwise,}
+  \end{cases}
+  \intertext{which in particular implies that}
+  \label{eq:dg_avg}
+  \varphi_{K,z}|_{K_{z'}}(z') &= \begin{cases}
+    1 & \text{if $z=z'$, $z\in\mathcal{L}^{\mathrm{int}}_1$, and $K_{z'}=K$,} \\
+    0 & \text{otherwise.}
+  \end{cases}
+\end{align}
+%
+Recall that, for $z\in\mathcal{L}_1$, $K_z$ is a~uniquely given mesh element
+containing~$z$ (chosen at random or of smallest index, etc.).
+
+Similarly to \cref{eq:rhs_cr} we have
+%
+\begin{equation}
+  \label{eq:rhs_dg}
+  \begin{aligned}
+    \langle f, E_1 \varphi_{K,z} \rangle
+    &= \sum_{z'\in\mathcal{L}^{\mathrm{int}}_1} \varphi_{K,z}|_{K_{z'}}(z')
+      \, \langle f, \varphi^1_{z'} \rangle
+    \\
+    &+ \sum_{F'\in \mathcal{F}^{\mathrm{int}}} \Bigl( \int_{F'} \ldblbrace
+      \varphi_{K,z} \rdblbrace - \sum_{z'\in\mathcal{L}^{F'}_1}
+      \varphi_{K,z}|_{K_{z'}}(z') \, \int_{F'} \varphi_{z'}^1 \Bigr)
+      \, \langle f, \hat\varphi_{F'} \rangle.
+  \end{aligned}
+\end{equation}
+%
+The first term in~\cref{eq:rhs_dg} with~\cref{eq:dg_avg} explains
+\texttt{coeffs1} in \texttt{SmoothingOpVeeserZanottiDG\allowbreak.coeffs()}.
+It is
 %
 \begin{equation*}
-  \int_{F'} \varphi^1_z = \tfrac12 |F'| \quad \text{if $z\in\overline F'$.}
+  \int_{F'} \ldblbrace \varphi_{K,z} \rdblbrace = \frac14 |F'|
+  \qquad \text{if $F'\subset K$ and
+               $z\in\mathcal{L}^{F'}_1\cap\mathcal{L}^{\mathrm{int}}_1$,}
 \end{equation*}
 %
-
-
+which explains together with~\cref{eq:cr_3} and~\cref{eq:facet_bubbles}
+the values \texttt{3/8} and \texttt{-3/4} in \texttt{coeffs2}, which
+correspond to the second and third term in~\cref{eq:rhs_dg}, respectively.
 
 
 \begingroup
