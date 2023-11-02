@@ -1,0 +1,12 @@
+*.msh
+*.log
+*.pdf
+*.pvd
+*.vtu
+*.tex
+__pycache__/
+
+# Potentially produced by bin/run_firedrake_container
+.bash_history
+.python_history
+.cache
