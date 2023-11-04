@@ -24,6 +24,10 @@ hs = ('0.1668', '0.0834', '0.0417', '0.0208', '0.0104', '0.0052', '0.0026')
 table_snippet = r"""
 \newcommand*%s{%%
   \begin{table}[H]
+    \caption{Experimental order of convergence EOC$_\ell$, $\ell \in \{1,\ldots,%s\}$,
+             for %s,
+             with %s.}
+    \label{%s}
     \setlength\tabcolsep{8pt}
     \centering
     \begin{tabular}{%s}
@@ -38,10 +42,6 @@ table_snippet = r"""
       \\ \hline
     \end{tabular}
     \vspace{1ex}
-    \caption{Experimental order of convergence EOC$_\ell$, $\ell \in \{1,\ldots,%s\}$,
-             for %s,
-             with %s.}
-    \label{%s}
   \end{table}
 }
 """
@@ -61,9 +61,8 @@ def generate_table_code(disc, rho, rates):
     rho_tag, rho_desc = rhos[rho]
     tag = f'tbl:{disc_tag}_rate_{rho}'
     cmd_name = fr'\tbl_{disc_tag}_rate_{rho_tag}'.title().replace('_', '')
-    code = table_snippet % (cmd_name, col_spec, ps_code, rates_code,
-                            expected_rates_code, num_refs, disc_desc,
-                            rho_desc, tag)
+    code = table_snippet % (cmd_name, num_refs, disc_desc, rho_desc, tag,
+                            col_spec, ps_code, rates_code, expected_rates_code)
     return code
 
 
