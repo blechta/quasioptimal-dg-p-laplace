@@ -22,7 +22,7 @@ class PowerLaw(NonlinearEllipticProblem):
         return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square2.msh")
 
     def const_rel(self, D):
-        return self.K * (self.delta + fd.inner(D, D)) ** (0.5*self.p-1) * D
+        return self.K * (self.delta + fd.sqrt(fd.inner(D, D))) ** (self.p-2) * D
 
     def exact_solution(self, Z):
         x, y = fd.SpatialCoordinate(Z.ufl_domain())
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # Initialize values for the constitutive relation
     p = fd.Constant(2.0)
     K = fd.Constant(1.0)
-    delta = fd.Constant(0.0001)
+    delta = fd.Constant(0.001)
     max_shift = fd.Constant(0.)
 
     # Choose over which constitutive parameters we do continuation
