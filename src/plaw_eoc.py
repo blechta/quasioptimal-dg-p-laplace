@@ -39,7 +39,7 @@ class PowerLaw(NonlinearEllipticProblem):
 
     def interpolate_initial_guess(self, z):
         x, y = fd.SpatialCoordinate(z.ufl_domain())
-        z.interpolate((x+1)**2 * (1-x)**2 * (y+1)**2 * (1-y)**2)
+        z.project((x+1)**2 * (1-x)**2 * (y+1)**2 * (1-y)**2)
 
 
 class PowerLawLDG(PowerLaw):
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         solver_kwargs = {"nref": nref, "smoothing": args.smoothing, "no_shift": args.no_shift}
         solver_ = solver_class(problem_, **solver_kwargs)
 
-        if (np.abs(float(delta)) < 1e-10) or (args.disc == "LDG"): problem_.interpolate_initial_guess(solver_.z)
+        problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
         if args.disc == "LDG":

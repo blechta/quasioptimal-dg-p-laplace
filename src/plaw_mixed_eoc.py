@@ -123,9 +123,7 @@ if __name__ == "__main__":
     for nref in range(len(res)):
         solver_ = solver_class(problem_, nref=nref, smoothing=args.smoothing, no_shift=args.no_shift)
 
-        if (np.abs(float(delta**(p_s[-1]-1))) < 1e-12):
-            print(fd.RED % 'Setting initial guess...')
-            problem_.interpolate_initial_guess(solver_.z)
+        problem_.interpolate_initial_guess(solver_.z)
 
         solver_.solve(continuation_params)
         S, u = solver_.z.subfunctions
