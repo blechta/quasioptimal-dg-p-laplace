@@ -1,6 +1,7 @@
 import sys
 import os
 from ast import literal_eval
+from collections import defaultdict
 
 
 discretizations = {
@@ -28,6 +29,7 @@ table_snippet = r"""
              for %s,
              with %s.}
     \label{%s}
+    \vspace{1ex}
     \setlength\tabcolsep{8pt}
     \centering
     \begin{tabular}{%s}
@@ -41,7 +43,6 @@ table_snippet = r"""
       %s
       \\ \hline
     \end{tabular}
-    \vspace{1ex}
   \end{table}
 }
 """
@@ -64,7 +65,6 @@ def generate_table_code(disc, rho, rates):
     code = table_snippet % (cmd_name, num_refs, disc_desc, rho_desc, tag,
                             col_spec, ps_code, rates_code, expected_rates_code)
     return code
-
 
 
 def main(outdir):
@@ -91,8 +91,13 @@ def extract_rates(outdir):
             rates[disc][rho] = {}
             for p in ps:
                 filepath = os.path.join(outdir, f'{disc}_rate_{rho}_p_{p}.log')
-                r = parse_log_file_for_rates(filepath)
-                r = r['total']
+                try:
+                    r = parse_log_file_for_rates(filepath)
+                except (AssertionError, FileNotFoundError):
+                    r = {}
+                else:
+                    r = r['total']
+                r = defaultdict(lambda: float('nan'), {i: j for i, j in enumerate(r)})
                 rates[disc][rho][p] = r
     return rates
 
@@ -106,7 +111,7 @@ def parse_log_file_for_rates(filepath):
             if line.startswith('Computed rates:'):
                 break
 
-        # Reed all rates
+        # Read all rates
         lines = []
         for line in f:
             if line.startswith('Average EOC:'):
