@@ -25,14 +25,14 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square2.msh")
 
     def const_rel(self, S):
-        return (self.delta**(self.p-1) + fd.sqrt(fd.inner(S,S))) ** (self.p/(self.p-1) - 2) * S
+        return (self.delta**(2*self.p-2) + fd.inner(S,S)) ** (0.5*self.p/(self.p-1) - 1) * S
 
     def approx_const_rel_inverse(self, D):
         """This is an S = S(D) constitutive relation which
         isn't necesarrily an inverse to self.const_rel().
         It is only used to compute a manufactured flux.
         """
-        return (self.delta + fd.sqrt(fd.inner(D, D))) ** (self.p_final - 2) * D
+        return (self.delta**2 + fd.inner(D, D)) ** (0.5*self.p_final - 1) * D
 
     def approx_exact_potential(self, Z):
         """This is a potential which isn't necessarily an exact potential.
@@ -88,13 +88,13 @@ if __name__ == "__main__":
 
     # Initialize values for the constitutive relation
     p = fd.Constant(2.0)
-    delta = fd.Constant(0.001)
+    delta = fd.Constant(0.01)
     max_shift = fd.Constant(0.)
 
     # Choose over which constitutive parameters we do continuation
     # First all the possibilities for p:
     if args.cr == "thinning":
-        possible_p_s = [2.0, 1.9, 1.7, 1.6, 1.5]
+        possible_p_s = [2.0, 1.8, 1.7, 1.6, 1.5]
         args.no_shift = True
     elif args.cr == "thickening":
         possible_p_s = [2.0, 2.5, 3.0, 4.0, 4.5]

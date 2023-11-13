@@ -208,8 +208,8 @@ class NonlinearEllipticSolver(object):
             p_ = self.p
             delta_ = self.delta
 
-        F_1 = (delta_ + fd.inner(w_1, w_1)**(1/2.))**(0.5*p_-1) * w_1
-        F_2 = (delta_ + fd.inner(w_2, w_2)**(1/2.))**(0.5*p_-1) * w_2
+        F_1 = (delta_ + fd.sqrt(fd.inner(w_1, w_1)))**(0.5*p_-1) * w_1
+        F_2 = (delta_ + fd.sqrt(fd.inner(w_2, w_2)))**(0.5*p_-1) * w_2
         F_ = F_1 - F_2
         dx = fd.dx(degree=quad_degree)
         return (fd.assemble(fd.inner(F_, F_) * dx))**0.5
@@ -225,30 +225,30 @@ class NonlinearEllipticSolver(object):
 #            return S_norm + u_norm
 
     def get_parameters(self):
-        #LU for now I guess...
-        params = {"snes_monitor": None,
-                  "snes_converged_reason": None,
-                  #"snes_max_it": 20,
-                  "snes_max_it": 100,
-                  "snes_atol": 1e-8,
-                  "snes_rtol": 1e-6,
-                  "snes_dtol": 1e10,
-                  "snes_type": "newtonls",
-                  #"snes_linesearch_type": "none",
-                  "snes_linesearch_type": "nleqerr",
-                  "ksp_type": "preonly",
-                  "pc_type": "lu",
-                  "ksp_converged_reason": None,
-                  "ksp_monitor_true_residual": None,
-                  "pc_factor_mat_solver_type": "mumps",
-                  #"mat_mumps_icntl_14": 5000,
-                  #"mat_mumps_icntl_24" : 1,
-                  #"mat_mumps_cntl_1": 0.001,
-                  #"mat_mumps_cntl_3": 0.0001,
-                  }
+        params = {
+            "snes_monitor": None,
+            "snes_converged_reason": None,
+            "snes_max_it": 100,
+            "snes_atol": 1e-8,
+            "snes_rtol": 1e-6,
+            "snes_dtol": 1e10,
+            "snes_type": "newtonls",
+            "snes_linesearch_type": "nleqerr",
+            "snes_linesearch_monitor": None,
+            "ksp_type": "preonly",
+            "pc_type": "lu",
+            "ksp_converged_reason": None,
+            #"ksp_monitor_true_residual": None,
+            "pc_factor_mat_solver_type": "mumps",
+            #"mat_mumps_icntl_14": 5000,
+            #"mat_mumps_icntl_24": 1,
+            #"mat_mumps_cntl_1": 0.001,
+            #"mat_mumps_cntl_3": 0.0001,
+        }
         return params
 
-    def lhs(self, z, z_): raise NotImplementedError
+    def lhs(self, z, z_):
+        raise NotImplementedError
 
 class ConformingSolver(NonlinearEllipticSolver):
 
@@ -322,7 +322,7 @@ class CrouzeixRaviartSolver(ConformingSolver):
         if form == "p-d":
             p = self.problem.const_rel_params["p"]
             delta = self.problem.const_rel_params["delta"]
-            jmp_penalty = (delta + self.max_shift + fd.sqrt(fd.inner(U_jmp, U_jmp))) ** (p-2) * U_jmp
+            jmp_penalty = (delta**2 + self.max_shift**2 + fd.inner(U_jmp, U_jmp)) ** (0.5*p - 1) * U_jmp
         elif form == "const_rel":
             raise NotImplementedError
             # TODO: Need one relation for the bulk without shift and another
