@@ -322,7 +322,7 @@ class CrouzeixRaviartSolver(ConformingSolver):
         if form == "p-d":
             p = self.problem.const_rel_params["p"]
             delta = self.problem.const_rel_params["delta"]
-            jmp_penalty = (delta**2 + self.max_shift**2 + fd.inner(U_jmp, U_jmp)) ** (0.5*p - 1) * U_jmp
+            jmp_penalty = (delta + self.max_shift + fd.sqrt(fd.inner(U_jmp, U_jmp))) ** (p - 2) * U_jmp
         elif form == "const_rel":
             raise NotImplementedError
             # TODO: Need one relation for the bulk without shift and another
