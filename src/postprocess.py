@@ -49,6 +49,7 @@ table_snippet = r"""
 
 
 def generate_table_code(disc, rho, rates):
+
     col_spec = '|c||' + '|'.join('c' if p != '2.0' else '|c|' for p in ps) + '|'
     ps_code = ' '.join(r'& \cellcolor{lightgray}' + p for p in ps)
     rates_code = '\n      '.join(
@@ -98,8 +99,18 @@ def extract_rates(outdir):
                 else:
                     r = r['total']
                 r = defaultdict(lambda: float('nan'), {i: j for i, j in enumerate(r)})
+                fixup_rates(r)
                 rates[disc][rho][p] = r
     return rates
+
+
+def fixup_rates(rates):
+
+    for key, val in rates.items():
+        try:
+            f'{val:.3f}'
+        except TypeError:
+            rates[key] = float('nan')
 
 
 def parse_log_file_for_rates(filepath):

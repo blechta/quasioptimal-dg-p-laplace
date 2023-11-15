@@ -310,6 +310,19 @@ class CrouzeixRaviartSolver(ConformingSolver):
         else:
             raise ValueError
 
+    @staticmethod
+    def n_function(p, delta, a, t):
+        """Return shifted n-function and its derivative corresponding to
+        (p,delta)-structure"""
+        s = fd.sqrt(fd.inner(t, t))
+        varphi_a = (
+            + (delta + a + s)**(p-1) * s / (p-1)
+            - (delta + a + s)**p / (p*(p-1))
+            + (delta + a    )**p / (p*(p-1))
+        )
+        dvarphi_a = (delta + a + s)**(p-2) * t
+        return varphi_a, dvarphi_a
+
     def ip_penalty_jump(self, h_factor, vec, form=None):
         """Define the nonlinear part in penalty term using the constitutive
         relation or just using the Lp norm
@@ -322,7 +335,7 @@ class CrouzeixRaviartSolver(ConformingSolver):
         if form == "p-d":
             p = self.problem.const_rel_params["p"]
             delta = self.problem.const_rel_params["delta"]
-            jmp_penalty = (delta + self.max_shift + fd.sqrt(fd.inner(U_jmp, U_jmp))) ** (p - 2) * U_jmp
+            _, jmp_penalty = self.n_function(p, delta, self.max_shift, U_jmp)
         elif form == "const_rel":
             raise NotImplementedError
             # TODO: Need one relation for the bulk without shift and another
@@ -341,17 +354,22 @@ class CrouzeixRaviartSolver(ConformingSolver):
         return jmp_penalty
 
     def modular(self, z):
-        alpha = 10. * self.k**2
+        p = self.problem.const_rel_params["p"]
+        delta = self.problem.const_rel_params["delta"]
         n = fd.FacetNormal(self.Z.ufl_domain())
         h = fd.CellDiameter(self.Z.ufl_domain())
-        U_jmp = 2. * fd.avg(fd.outer(z,n))
-        U_jmp_bdry = fd.outer(z, n)
-        jmp_penalty = self.ip_penalty_jump(1./fd.avg(h), U_jmp, form=self.penalty_form)
-        jmp_penalty_bdry = self.ip_penalty_jump(1./h, U_jmp_bdry, form=self.penalty_form)
-        jumps = fd.assemble(alpha * fd.inner(jmp_penalty, 2*fd.avg(fd.outer(z, n))) * fd.dS)
-        jumps += fd.assemble(alpha * fd.inner(jmp_penalty_bdry, fd.outer(z,n)) * fd.ds)
-        power = 2.0
-        return (jumps)**(1./power)
+        U_jmp = 2*fd.avg(fd.outer(z,n)) / fd.avg(h)
+        U_jmp_bdry = fd.outer(z, n) / h
+        jmp_penalty, _ = self.n_function(p, delta, self.max_shift, U_jmp)
+        jmp_penalty_bdry, _ = self.n_function(p, delta, self.max_shift, U_jmp_bdry)
+        integrand = fd.avg(h) * jmp_penalty
+        integrand_bdry = h * jmp_penalty_bdry
+        jumps = fd.assemble(integrand * fd.dS)
+        jumps += fd.assemble(integrand_bdry * fd.ds)
+        if jumps < 0:
+            fd.warning(fd.RED % f'Computed modular negative: {jumps=}. Taking zero instead.')
+            jumps = 0
+        return jumps ** 0.5
 
 
 class DGSolver(CrouzeixRaviartSolver):
