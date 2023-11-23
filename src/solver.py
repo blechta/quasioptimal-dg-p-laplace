@@ -369,7 +369,8 @@ class CrouzeixRaviartSolver(ConformingSolver):
         if jumps < 0:
             fd.warning(fd.RED % f'Computed modular negative: {jumps=}. Taking zero instead.')
             jumps = 0
-        return jumps ** 0.5
+        alpha = 10. * self.k**2
+        return (alpha * jumps) ** 0.5
 
 
 class DGSolver(CrouzeixRaviartSolver):
