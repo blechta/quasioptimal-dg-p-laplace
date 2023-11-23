@@ -25,14 +25,14 @@ class PowerLaw(NonlinearEllipticProblem_Su):
         return fd.Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square2.msh")
 
     def const_rel(self, S):
-        return (self.delta**(self.p-1) + fd.sqrt(fd.inner(S,S))) ** (self.p/(self.p-1) - 2) * S
+        return (self.delta**(2*self.p-2) + fd.inner(S,S)) ** (0.5*self.p/(self.p-1) - 1) * S
 
     def approx_const_rel_inverse(self, D):
         """This is an S = S(D) constitutive relation which
         isn't necesarrily an inverse to self.const_rel().
         It is only used to compute a manufactured flux.
         """
-        return (self.delta + fd.sqrt(fd.inner(D, D))) ** (self.p_final - 2) * D
+        return (self.delta**2 + fd.inner(D, D)) ** (0.5*self.p_final - 1) * D
 
     def approx_exact_potential(self, Z):
         """This is a potential which isn't necessarily an exact potential.
